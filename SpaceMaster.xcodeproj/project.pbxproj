@@ -338,13 +338,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1.0.20200125;
-				DEVELOPMENT_TEAM = XU23KUT3NV;
+				DEVELOPMENT_TEAM = Y75832Z43J;
 				INFOPLIST_FILE = "$(SRCROOT)/SpaceMaster/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = es.ua.mastermoviles.SpaceMaster;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carlsalf.spacemaster2026;
 				PRODUCT_NAME = SpaceMaster;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -357,13 +357,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1.0.20200125;
-				DEVELOPMENT_TEAM = XU23KUT3NV;
+				DEVELOPMENT_TEAM = Y75832Z43J;
 				INFOPLIST_FILE = "$(SRCROOT)/SpaceMaster/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = es.ua.mastermoviles.SpaceMaster;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carlsalf.spacemaster2026;
 				PRODUCT_NAME = SpaceMaster;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
