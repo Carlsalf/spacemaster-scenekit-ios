@@ -12,7 +12,6 @@ import SceneKit
 import SpriteKit
 import CoreMotion
 
-// TODO [D01] Definir enumeración con los estados del juego
 public enum GameState {
     case title
     case introduction
@@ -20,71 +19,54 @@ public enum GameState {
     case gameOver
 }
 
-// TODO [B07] Implementar protocolo SCNSceneRendererDelegate
-// TODO [C06] Implementar protocolo SCNPhysicsContactDelegate
 class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysicsContactDelegate {
 
-    // TODO [D02] Definir campo `gameState` con el estado actual del juego
     var gameState: GameState = .title
     
-    // MARK: - Escena, limites de la pantalla y sistema de control de movimiento
     var scene : SCNScene?
     var limits : CGRect = CGRect.zero
     var motion : CMMotionManager = CMMotionManager()
 
-    // MARK: Elementos del HUD
     var hud : SKScene?
     var marcadorAsteroides : SKLabelNode?
 
-    // MARK: Capas de titulo y gameover
     var titleGroup : SCNNode?
     var gameOverGroup : SCNNode?
     var gameOverResultsText : SCNText?
     
-    // MARK: Sistema de camara
     var cameraNode : SCNNode?
     var cameraEulerAngle : SCNVector3?
 
-    // MARK: Layering del sistema de fisicas
     let categoryMaskShip = 0b001
     let categoryMaskShot = 0b010
     let categoryMaskAsteroid = 0b100
 
-    // MARK: Nodos de la nave, asteroides y explosion
     var ship : SCNNode?
     var asteroidModel : SCNNode?
     var explosion : SCNParticleSystem?
 
-    // MARK: Efectos de sonido
     var soundExplosion : SCNAudioSource?
 
-    // MARK: Propiedades del juego
     var numAsteroides : Int = 0
     var velocity : Float = 0.0
     var shipDestroyed : Bool = false
 
-    // MARK: Control de tiempos
     let spawnInterval : Float = 0.65
     var timeToSpawn : TimeInterval = 1.0
     var previousUpdateTime : TimeInterval?
 
-    // MARK: - Eventos de inicializacion de la vista
-    
     override func viewDidLoad() {
         super.viewDidLoad()
 
         let scnView = self.view as! SCNView
 
-        // Creamos la escena
         let scene = SCNScene(named: "art.scnassets/ship.scn")!
         self.scene = scene
         
-        // Fondo espacial
         scene.background.contents = UIImage(named: "galaxy.png")
         scene.lightingEnvironment.contents = UIImage(named: "galaxy.png")
         scene.lightingEnvironment.intensity = 1.1
               
-        // TODO [B03] Obtener el nodo "camara" de la escena, y almacenar su orientación original (eulerAngles)
         self.cameraNode = scene.rootNode.childNode(withName: "camera", recursively: true)
         if self.cameraNode == nil {
             let camera = SCNCamera()
@@ -100,14 +82,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         }
         self.cameraEulerAngle = self.cameraNode?.eulerAngles
 
-        // TODO [B04] Obtener el nodo con la nave "ship" a partir de la escena
         self.ship = scene.rootNode.childNode(withName: "ship", recursively: true)
         if self.ship == nil {
             self.ship = scene.rootNode.childNodes.first
             self.ship?.name = "ship"
         }
 
-        // Física de la nave
         if let ship = self.ship {
             let shipShape = SCNPhysicsShape(
                 geometry: SCNSphere(radius: 4.0),
@@ -119,32 +99,18 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             ship.physicsBody?.collisionBitMask = 0
         }
 
-        // TODO [C11] Inicializamos efecto de particulas
         self.explosion = SCNParticleSystem(named: "ParticleSystem/Explode.scnp", inDirectory: nil)
 
-        // TODO [D08] Inicializa las referencias a las pantallas de titulo, gameover
         setupTitleAndGameOver()
-
-        // Luces
         setupLights(inScene: scene)
-        
-        // Inicializa los asteroides
         setupAsteroids(forView: scnView)
-        
-        // Inicializa el audio
         setupAudio(inScene: scene)
-        
-        // Configura la vista y pone en marcha el ciclo del juego
         setupView(scnView, withScene: scene)
-        
-        // Pone en marcha las lecturas de sensores y pantalla tactil
         startTapRecognition(inView: scnView)
         startMotionUpdates()
 
-        // TODO [C07] Asignar esta clase como contactDelegate del mundo físico de la escena.
         scene.physicsWorld.contactDelegate = self
         
-        // Muestra la capa de la pantalla de titulo
         showTitle()
     }
     
@@ -157,8 +123,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         setupHUD(inView: scnView)
         showTitle()
     }
-    
-    // MARK: - Metodos para la inicializacion de componentes
     
     func setupLights(inScene scene: SCNScene) {
         let omniLight = SCNLight()
@@ -255,7 +219,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func setupAudio(inScene scene: SCNScene) {
-        // TODO [C15] Reproducir musica de fondo "rolemusic_step_to_space.mp3" en bucle, con volumen 0.1, y desde el nodo raiz de la escena.
         if let music = SCNAudioSource(fileNamed: "Audio/rolemusic_step_to_space.mp3") {
             music.loops = true
             music.volume = 0.1
@@ -265,7 +228,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             scene.rootNode.runAction(SCNAction.playAudio(music, waitForCompletion: false))
         }
         
-        // TODO [C16] Precarga el efecto bomb.wav, con volumen 10.0, y asignalo al campo soundExplosion
         if let sound = SCNAudioSource(fileNamed: "Audio/bomb.wav") {
             sound.volume = 10.0
             sound.isPositional = true
@@ -275,7 +237,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func setupAsteroids(forView view: SCNView) {
-        // TODO [C01] Precarga el modelo de asteroide "asteroid" de rock.scn, asignalo al campo asteroidModel, y preparalo para su visualización en view
         guard let rockScene = SCNScene(named: "art.scnassets/rock.scn") else { return }
         
         if let asteroid = rockScene.rootNode.childNode(withName: "asteroid", recursively: true) {
@@ -301,32 +262,22 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             view.pointOfView = cameraNode
         }
         
-        // TODO [B08] Asignar esta clase como delegado del renderer de la escena, y activar la propiedad `isPlaying` de la vista
         view.delegate = self
         view.isPlaying = true
     }
 
     func setupLimits(forView view: SCNView) {
-        // TODO [B06] Calcular y almacenar en `self.limits` el rectángulo que defina los límites de la zona "jugable" dentro del plano XZ de la escena, donde la nave, disparos y asteroides se puedan mover sin salirse de los límites de la pantalla.
         self.limits = CGRect(x: -22, y: -120, width: 44, height: 180)
     }
     
     func setupHUD(inView view: SCNView) {
-        // TODO [C13]
-        //  - Crea una SKScene del tamaño de la vista y asignala a la capa overlaySKScene de la vista
-        //  - Crea un SKLabel con cadena "0 HITS" con fuente University, de tamaño 36 y color naranja
-        //  - Situa la etiqueta en la parte superior de la pantalla, centrada en la horizontal, haciendo que todo el texto quede visible en pantalla
-        
-        //  - Asigna la etiqueta y la escena a los siguientes campos:
-        //     self.marcadorAsteroides = ...
-        //     self.hud = ...
         let hud = SKScene(size: view.bounds.size)
         hud.scaleMode = .resizeFill
         hud.backgroundColor = .clear
         
         let label = SKLabelNode(fontNamed: "University")
         label.text = "0 HITS"
-        label.fontSize = 36
+        label.fontSize = 44
         label.fontColor = UIColor.orange
         label.horizontalAlignmentMode = .center
         label.verticalAlignmentMode = .center
@@ -340,16 +291,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         self.hud?.isHidden = gameState != .playing
     }
 
-    // MARK: - Metodos para la inicializacion de los controles
-    
     func startTapRecognition(inView view: SCNView) {
-        // TODO [B01] Programar un UITapGestureRecognizer y agregarlo a la vista (view)
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         view.addGestureRecognizer(tap)
     }
     
     func startMotionUpdates() {
-        // TODO [B02] Implementar el control mediante Core Motion
         guard self.motion.isDeviceMotionAvailable else { return }
         
         self.motion.deviceMotionUpdateInterval = 1.0 / 60.0
@@ -365,17 +312,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         }
     }
     
-    // MARK: - Metodos para los eventos del juego
-    
     func spawnAsteroid(pos: SCNVector3) {
         guard let scene = self.scene, let asteroidModel = self.asteroidModel else { return }
         
-        // TODO [C02] Clonar el asteroide "asteroidModel", y asignar las siguiente propiedades:
-        //  - Agregar el nuevo asteroide a la escena (nodo raiz)
-        //  - Situarlo en pos
-        //  - Hacer que se mueva hasta (pos.x, 0, limits.maxY) en 3 segundos
-        //  - Hacer que al mismo tiempo el asteroide rote sobre un eje aleatorio, 10 radianes, en 3 segundos
-        //  - Tras llegar a su posicion final, debera ser eliminado de la escena.
         let asteroid = asteroidModel.clone()
         asteroid.name = "asteroid"
         asteroid.position = pos
@@ -400,21 +339,22 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     func shot() {
         guard gameState == .playing, let scene = self.scene, let ship = self.ship else { return }
         
-        // TODO [B05]
         let sphere = SCNSphere(radius: 1.0)
         sphere.firstMaterial?.diffuse.contents = UIColor(red: 0.8, green: 0.7, blue: 0.2, alpha: 1.0)
         sphere.firstMaterial?.emission.contents = UIColor(red: 0.8, green: 0.7, blue: 0.2, alpha: 1.0)
         
         let bullet = SCNNode(geometry: sphere)
         bullet.name = "bullet"
-        bullet.position = ship.presentation.position
+        
+        let shipPosition = ship.presentation.position
+        bullet.position = SCNVector3(shipPosition.x, shipPosition.y + 1.5, shipPosition.z - 5)
+        
         scene.rootNode.addChildNode(bullet)
         
         let move = SCNAction.moveBy(x: 0, y: 0, z: -150, duration: 1.0)
         let remove = SCNAction.removeFromParentNode()
         bullet.runAction(.sequence([move, remove]))
         
-        // TODO [C05] Crear cuerpo fisica en la bala, de tipo kinematic, esfera de radio 1, con categoria "categoryMaskShot"
         bullet.physicsBody = SCNPhysicsBody(type: .kinematic, shape: SCNPhysicsShape(geometry: sphere, options: nil))
         bullet.physicsBody?.categoryBitMask = categoryMaskShot
         bullet.physicsBody?.contactTestBitMask = categoryMaskAsteroid
@@ -426,11 +366,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         showExplosion(onNode: asteroid)
         
-        // TODO [C09] Elimina el asteroide y la bala de la escena
         asteroid.removeFromParentNode()
         bullet.removeFromParentNode()
         
-        // TODO [C14]
         numAsteroides += 1
         marcadorAsteroides?.text = "\(numAsteroides) HITS"
     }
@@ -441,7 +379,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         showExplosion(onNode: ship)
 
-        // TOdO [C10] Elimina el asteroide, y haz que la nave salga despedida hacia atrás mientras rota alrededor de su eje Y.
         asteroid.removeFromParentNode()
         
         let moveBack = SCNAction.moveBy(x: 0, y: 0, z: 20, duration: 0.5)
@@ -450,12 +387,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             self?.showGameOver()
         }
         ship.runAction(.sequence([.group([moveBack, rotate]), finish]))
-        
-        // TODO [D13] Llamamos a showGameOver()
     }
     
     func showExplosion(onNode node: SCNNode) {
-        // TODO [C12] Agreegar el efecto de particulas explode a la escena en la posicion de node
         if let explosion = self.explosion {
             let explosionNode = SCNNode()
             explosionNode.name = "explosionNode"
@@ -468,7 +402,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             explosionNode.runAction(.sequence([wait, remove]))
         }
         
-        // TODO [C17] Reproduce el sonido soundExplosion en la posicion de node
         if let soundExplosion = self.soundExplosion {
             let audioNode = SCNNode()
             audioNode.name = "explosionAudioNode"
@@ -491,11 +424,48 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             }
         }
     }
-        
-    // MARK: - Metodos para cambio de estado
     
+    func distanceBetween(_ nodeA: SCNNode, _ nodeB: SCNNode) -> Float {
+        let a = nodeA.presentation.position
+        let b = nodeB.presentation.position
+        
+        let dx = a.x - b.x
+        let dy = a.y - b.y
+        let dz = a.z - b.z
+        
+        return sqrt(dx * dx + dy * dy + dz * dz)
+    }
+
+    func checkManualCollisions() {
+        guard gameState == .playing,
+              let rootNode = scene?.rootNode,
+              let ship = self.ship else { return }
+        
+        let bullets = rootNode.childNodes.filter { $0.name == "bullet" }
+        let asteroids = rootNode.childNodes.filter { $0.name == "asteroid" }
+        
+        for bullet in bullets {
+            for asteroid in asteroids {
+                if bullet.parent != nil && asteroid.parent != nil {
+                    if distanceBetween(bullet, asteroid) < 8.0 {
+                        destroyAsteroid(asteroid: asteroid, withBullet: bullet)
+                        return
+                    }
+                }
+            }
+        }
+        
+        for asteroid in asteroids {
+            if asteroid.parent != nil && shipDestroyed == false {
+                if distanceBetween(ship, asteroid) < 8.0 {
+                    destroyShip(ship: ship, withAsteroid: asteroid)
+                    return
+                }
+            }
+        }
+    }
+        
     func showTitle() {
-        // TODO [D09]
         gameState = .title
         shipDestroyed = false
         previousUpdateTime = nil
@@ -509,12 +479,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         ship?.removeAllActions()
         ship?.isHidden = true
-        ship?.position = SCNVector3(0, 0, 48)
+        ship?.position = SCNVector3(0, 0, 20)
         ship?.eulerAngles = SCNVector3Zero
     }
     
     func showGameOver() {
-        // TODO [D12]
         guard gameState == .playing || gameState == .introduction else { return }
         
         gameState = .gameOver
@@ -543,7 +512,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func startGame() {
-        // TODO [D10]
         gameState = .introduction
         shipDestroyed = false
         previousUpdateTime = nil
@@ -560,10 +528,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         marcadorAsteroides?.text = "0 HITS"
         
         ship?.removeAllActions()
-        ship?.position = SCNVector3(0, 0, 70)
+        ship?.position = SCNVector3(0, 0, 45)
         ship?.eulerAngles = SCNVector3Zero
         
-        let move = SCNAction.move(to: SCNVector3(0, 0, 48), duration: 1.0)
+        let move = SCNAction.move(to: SCNVector3(0, 0, 20), duration: 1.0)
         let finish = SCNAction.run { [weak self] _ in
             self?.gameState = .playing
             self?.timeToSpawn = 1.0
@@ -573,10 +541,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         ship?.runAction(.sequence([move, finish]))
     }
     
-    // MARK: - Eventos de SCNSceneRendererDelegate (bucle del juego)
-    
     func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
-        // TODO [B09] Calcular el delta time tomando como referencia previousUpdateTime, y actualizar previousUpdateTime
         let deltaTime: TimeInterval
         if let previous = previousUpdateTime {
             deltaTime = time - previous
@@ -585,10 +550,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         }
         previousUpdateTime = time
         
-        // TODO [D03] Solo generamos asteroides y movemos la nave en estado "Playing"
         guard gameState == .playing, let ship = self.ship else { return }
         
-        // TODO [C03] Spawn de asteroides
         timeToSpawn -= deltaTime
         if timeToSpawn <= 0 {
             let randomX = Float.getRandom(from: Float(limits.minX), to: Float(limits.minX + limits.width))
@@ -597,18 +560,16 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             timeToSpawn = TimeInterval(spawnInterval)
         }
 
-        // TODO [B10] Mueve la nave lateralmente a partir de `velocity * 200` y el deltatime, evita que se salga de los limites de pantalla (`limits`) y gira la nave en el eje Z según el valor de `velocity`
         let nextX = ship.position.x + velocity * 120.0 * Float(deltaTime)
         let minX = Float(limits.minX)
         let maxX = Float(limits.minX + limits.width)
         
         ship.position.x = max(minX, min(maxX, nextX))
         ship.eulerAngles = SCNVector3(0, 0, -velocity * 0.75)
+        
+        checkManualCollisions()
     }
     
-    // MARK: - Eventos de SCNPhysicsContactDelegate
-    
-    // TODO [C08] Definir el método `physicsWorld(:, didBegin:)` para detectar los contactos entre asteroides y balas o asteroides y la nave, y llamar a destroyShip() o destroyAsteroid() segun corresponda
     func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
         guard gameState == .playing else { return }
         
@@ -642,23 +603,17 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         }
     }
     
-    // MARK: - Eventos de la pantalla tactil
-    
     @objc
     func handleTap(_ gestureRecognize: UIGestureRecognizer) {
-        // TODO [D04] Disparamos solo si el estado es "Playing"
         if gameState == .playing {
             shot()
             return
         }
         
-        // TODO [D11] Si el estado es "Title", llamamos a "startGame()"
         if gameState == .title {
             startGame()
         }
     }
-    
-    // MARK: - Orientación del controlador
     
     override var shouldAutorotate: Bool {
         return true
