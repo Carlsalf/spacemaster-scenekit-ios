@@ -64,7 +64,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var shipDestroyed : Bool = false
 
     // MARK: Control de tiempos
-    let spawnInterval : Float = 0.25
+    let spawnInterval : Float = 0.65
     var timeToSpawn : TimeInterval = 1.0
     var previousUpdateTime : TimeInterval?
 
@@ -93,8 +93,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             let node = SCNNode()
             node.name = "camera"
             node.camera = camera
-            node.position = SCNVector3(0, 50, 20)
-            node.eulerAngles = SCNVector3(-Float.pi / 4.0, 0, 0)
+            node.position = SCNVector3(0, 55, 35)
+            node.eulerAngles = SCNVector3(-Float.pi / 3.2, 0, 0)
             scene.rootNode.addChildNode(node)
             self.cameraNode = node
         }
@@ -109,7 +109,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         // Física de la nave
         if let ship = self.ship {
-            ship.physicsBody = SCNPhysicsBody(type: .kinematic, shape: SCNPhysicsShape(node: ship, options: nil))
+            let shipShape = SCNPhysicsShape(
+                geometry: SCNSphere(radius: 4.0),
+                options: nil
+            )
+            ship.physicsBody = SCNPhysicsBody(type: .kinematic, shape: shipShape)
             ship.physicsBody?.categoryBitMask = categoryMaskShip
             ship.physicsBody?.contactTestBitMask = categoryMaskAsteroid
             ship.physicsBody?.collisionBitMask = 0
@@ -151,6 +155,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         setupLimits(forView: scnView)
         setupHUD(inView: scnView)
+        showTitle()
     }
     
     // MARK: - Metodos para la inicializacion de componentes
@@ -159,18 +164,18 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         let omniLight = SCNLight()
         omniLight.type = .omni
         omniLight.color = UIColor.white
-        omniLight.intensity = 1000
+        omniLight.intensity = 1800
         
         let omniNode = SCNNode()
         omniNode.name = "omni"
         omniNode.light = omniLight
-        omniNode.position = SCNVector3(0, 5, 10)
+        omniNode.position = SCNVector3(0, 10, 20)
         scene.rootNode.addChildNode(omniNode)
         
         let ambientLight = SCNLight()
         ambientLight.type = .ambient
-        ambientLight.color = UIColor(white: 0.35, alpha: 1.0)
-        ambientLight.intensity = 400
+        ambientLight.color = UIColor(white: 0.45, alpha: 1.0)
+        ambientLight.intensity = 900
         
         let ambientNode = SCNNode()
         ambientNode.name = "ambient"
@@ -181,7 +186,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     func setupTitleAndGameOver() {
         guard let scene = self.scene else { return }
         
-        // Grupo de título
         let titleGroup = SCNNode()
         titleGroup.name = "titleGroup"
         
@@ -192,8 +196,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         let titleNode = SCNNode(geometry: titleText)
         centerPivot(of: titleNode)
-        titleNode.position = SCNVector3(0, 14, -30)
-        titleNode.scale = SCNVector3(0.45, 0.45, 0.45)
+        titleNode.position = SCNVector3(0, 10, -30)
+        titleNode.scale = SCNVector3(0.38, 0.38, 0.38)
         titleGroup.addChildNode(titleNode)
         
         let tapText = SCNText(string: "TAP TO START", extrusionDepth: 1.0)
@@ -203,14 +207,13 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         let tapNode = SCNNode(geometry: tapText)
         centerPivot(of: tapNode)
-        tapNode.position = SCNVector3(0, 5, -20)
-        tapNode.scale = SCNVector3(0.45, 0.45, 0.45)
+        tapNode.position = SCNVector3(0, 2, -20)
+        tapNode.scale = SCNVector3(0.42, 0.42, 0.42)
         titleGroup.addChildNode(tapNode)
         
         scene.rootNode.addChildNode(titleGroup)
         self.titleGroup = titleGroup
         
-        // Grupo de game over
         let gameOverGroup = SCNNode()
         gameOverGroup.name = "gameOverGroup"
         gameOverGroup.isHidden = true
@@ -222,8 +225,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         let gameOverNode = SCNNode(geometry: gameOverText)
         centerPivot(of: gameOverNode)
-        gameOverNode.position = SCNVector3(0, 12, -30)
-        gameOverNode.scale = SCNVector3(0.45, 0.45, 0.45)
+        gameOverNode.position = SCNVector3(0, 10, -30)
+        gameOverNode.scale = SCNVector3(0.42, 0.42, 0.42)
         gameOverGroup.addChildNode(gameOverNode)
         
         let resultsText = SCNText(string: "", extrusionDepth: 1.0)
@@ -235,8 +238,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         let resultsNode = SCNNode(geometry: resultsText)
         resultsNode.name = "resultsNode"
         centerPivot(of: resultsNode)
-        resultsNode.position = SCNVector3(0, 4, -20)
-        resultsNode.scale = SCNVector3(0.35, 0.35, 0.35)
+        resultsNode.position = SCNVector3(0, 2, -20)
+        resultsNode.scale = SCNVector3(0.30, 0.30, 0.30)
         gameOverGroup.addChildNode(resultsNode)
         
         scene.rootNode.addChildNode(gameOverGroup)
@@ -305,7 +308,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
     func setupLimits(forView view: SCNView) {
         // TODO [B06] Calcular y almacenar en `self.limits` el rectángulo que defina los límites de la zona "jugable" dentro del plano XZ de la escena, donde la nave, disparos y asteroides se puedan mover sin salirse de los límites de la pantalla.
-        self.limits = CGRect(x: -25, y: -120, width: 50, height: 160)
+        self.limits = CGRect(x: -22, y: -120, width: 44, height: 180)
     }
     
     func setupHUD(inView view: SCNView) {
@@ -334,6 +337,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         self.marcadorAsteroides = label
         self.hud = hud
+        self.hud?.isHidden = gameState != .playing
     }
 
     // MARK: - Metodos para la inicializacion de los controles
@@ -346,11 +350,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     
     func startMotionUpdates() {
         // TODO [B02] Implementar el control mediante Core Motion
-        //  - Comprobar en self.motion is Device Motion esta disponible
-        //  - Programar el intervalo de refreso de Device Motion updates en 1.0 / 60.0
-        //  - Comenzamos la lectura de Device Motion updates
-        //  - Hacemos que el ángulo de giro "roll" sea la velocidad (self.velocity) de nuestra nave
-        //  - Orientamos la cámara utilizando pitch (eulerAngles.x) y roll (eurlerAngles.z)
         guard self.motion.isDeviceMotionAvailable else { return }
         
         self.motion.deviceMotionUpdateInterval = 1.0 / 60.0
@@ -360,8 +359,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             self.velocity = Float(deviceMotion.attitude.roll)
             
             if let cameraNode = self.cameraNode, let original = self.cameraEulerAngle {
-                cameraNode.eulerAngles.x = original.x + Float(deviceMotion.attitude.pitch) * 0.25
-                cameraNode.eulerAngles.z = original.z + Float(deviceMotion.attitude.roll) * 0.15
+                cameraNode.eulerAngles.x = original.x + Float(deviceMotion.attitude.pitch) * 0.18
+                cameraNode.eulerAngles.z = original.z + Float(deviceMotion.attitude.roll) * 0.10
             }
         }
     }
@@ -390,8 +389,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         scene.rootNode.addChildNode(asteroid)
         
-        let move = SCNAction.move(to: SCNVector3(pos.x, 0, Float(limits.maxY)), duration: 3.0)
-        let rotate = SCNAction.rotate(by: 10.0, around: randomAxis, duration: 3.0)
+        let move = SCNAction.move(to: SCNVector3(pos.x, 0, 60), duration: 5.0)
+        let rotate = SCNAction.rotate(by: 10.0, around: randomAxis, duration: 5.0)
         let group = SCNAction.group([move, rotate])
         let remove = SCNAction.removeFromParentNode()
         
@@ -399,16 +398,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func shot() {
-        guard let scene = self.scene, let ship = self.ship else { return }
+        guard gameState == .playing, let scene = self.scene, let ship = self.ship else { return }
         
         // TODO [B05]
-        //  - Creamos una forma de tipo esfera (`SCNSphere`) con radio 1.0
-        //  - Le asignamos en su `firstMaterial`, tanto `diffuse` como `emission`, en su propiedad `contents` el color (`UIColor`) con RGB (0.8, 0.7, 0.2)
-        
-        //  - Creamos la bala como un nodo `SCNNode` con la geometría de esfera anterior, dandole nombre "bullet", y ubicandola en la misma posicion que la nave.
-        //  - Agregamos el nodo a la escena
-        //  - Definimos una accion que mueva la bala 150 unidades negativas en el eje Z, y tras ello elimine la bala de la escena
-        //  - Ejecutamos la accion sobre la bala
         let sphere = SCNSphere(radius: 1.0)
         sphere.firstMaterial?.diffuse.contents = UIColor(red: 0.8, green: 0.7, blue: 0.2, alpha: 1.0)
         sphere.firstMaterial?.emission.contents = UIColor(red: 0.8, green: 0.7, blue: 0.2, alpha: 1.0)
@@ -439,7 +431,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         bullet.removeFromParentNode()
         
         // TODO [C14]
-        //  - Incrementa el numero de asteroides destruidos (numAsteroides) y actualiza el texto del marcadorAsteroides con "X HITS"
         numAsteroides += 1
         marcadorAsteroides?.text = "\(numAsteroides) HITS"
     }
@@ -505,11 +496,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     
     func showTitle() {
         // TODO [D09]
-        //  - Cambiar el estado a `Title`
-        //  - Mostrar `titleGroup`
-        //  - Ocultar `gameOverGroup`
-        //  - Ocultar el HUD
-        //  - Ocultar la nave
         gameState = .title
         shipDestroyed = false
         previousUpdateTime = nil
@@ -523,21 +509,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         ship?.removeAllActions()
         ship?.isHidden = true
-        ship?.position = SCNVector3(0, 50, 50)
+        ship?.position = SCNVector3(0, 0, 48)
         ship?.eulerAngles = SCNVector3Zero
     }
     
     func showGameOver() {
         // TODO [D12]
-        //  - Cambiar el estado a `GameOver`
-        //  - Ocultar el HUD
-        //  - Mostrar 'gameOverGroup'
-        
-        //  - Poner en `gameOverResultsText` el texto "X ASTEROIDS DESTROYED"
-        
-        //  - Inicializar la posición de `gameOverGroup en (0, 0, 0)
-        //  - Inicializar la opacidad de `gameOverGroup a 1
-        //  - Ejecutamos una acción que mueva `gameOverGroup` a (0, 0, -200) en 2 segundos, con modificador de tiempo `easeOut`, y tras ello haga un fadeout del nodo en 0.5 segundos y llame a showTitle() para volver al titulo.
         guard gameState == .playing || gameState == .introduction else { return }
         
         gameState = .gameOver
@@ -565,23 +542,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         gameOverGroup?.runAction(.sequence([move, fade, backToTitle]))
     }
     
-    
     func startGame() {
         // TODO [D10]
-        //  - Cambiar el estado a `Introduction`
-        //  - Ocultar `titleGroup`
-        //  - Mostrar el HUD
-        //  - Mostrar la nave
-        
-        //  - Poner a '0' el contador de asteroides destruidos
-        //  - Poner como cadena vacía el texto del marcador de asteroides destruidos
-        
-        //  - Inicializar la posición de la nave en (0, 50, 50)
-        //  - Ejecutamos una acción que mueva la nave a la posición (0, 0, 0) en un segundo y tras esto pase a estado a `Playing`
         gameState = .introduction
         shipDestroyed = false
         previousUpdateTime = nil
-        timeToSpawn = 1.0
+        timeToSpawn = 1.2
         
         clearGameNodes()
         
@@ -594,13 +560,13 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         marcadorAsteroides?.text = "0 HITS"
         
         ship?.removeAllActions()
-        ship?.position = SCNVector3(0, 0, 40)
+        ship?.position = SCNVector3(0, 0, 70)
         ship?.eulerAngles = SCNVector3Zero
         
-        let move = SCNAction.move(to: SCNVector3(0, 0, 0), duration: 1.0)
+        let move = SCNAction.move(to: SCNVector3(0, 0, 48), duration: 1.0)
         let finish = SCNAction.run { [weak self] _ in
             self?.gameState = .playing
-            self?.timeToSpawn = TimeInterval(self?.spawnInterval ?? 0.25)
+            self?.timeToSpawn = 1.0
             self?.previousUpdateTime = nil
         }
         
@@ -623,29 +589,29 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         guard gameState == .playing, let ship = self.ship else { return }
         
         // TODO [C03] Spawn de asteroides
-        //  - Descontamos el deltatime de timeToSpawn, y cuando este llegue a 0 generamos un nuevo asteroide y restablecemos el valor de timeToSpawn a spawnInterval.
-        //  - El asteroide debe generarse en una posicion X aleatoria entre los limites de la escena (limits.minX y limits.maxX), Y=0, y Z=limits.minY
         timeToSpawn -= deltaTime
         if timeToSpawn <= 0 {
-            let randomX = Float.getRandom(from: Float(limits.minX), to: Float(limits.maxX))
-            let spawnPos = SCNVector3(randomX, 0, Float(limits.minY))
+            let randomX = Float.getRandom(from: Float(limits.minX), to: Float(limits.minX + limits.width))
+            let spawnPos = SCNVector3(randomX, 0, -120)
             spawnAsteroid(pos: spawnPos)
             timeToSpawn = TimeInterval(spawnInterval)
         }
 
         // TODO [B10] Mueve la nave lateralmente a partir de `velocity * 200` y el deltatime, evita que se salga de los limites de pantalla (`limits`) y gira la nave en el eje Z según el valor de `velocity`
-        let nextX = ship.position.x + velocity * 200.0 * Float(deltaTime)
+        let nextX = ship.position.x + velocity * 120.0 * Float(deltaTime)
         let minX = Float(limits.minX)
         let maxX = Float(limits.minX + limits.width)
         
         ship.position.x = max(minX, min(maxX, nextX))
-        ship.eulerAngles.z = -velocity * 0.75
+        ship.eulerAngles = SCNVector3(0, 0, -velocity * 0.75)
     }
     
     // MARK: - Eventos de SCNPhysicsContactDelegate
     
     // TODO [C08] Definir el método `physicsWorld(:, didBegin:)` para detectar los contactos entre asteroides y balas o asteroides y la nave, y llamar a destroyShip() o destroyAsteroid() segun corresponda
     func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
+        guard gameState == .playing else { return }
+        
         let nodeA = contact.nodeA
         let nodeB = contact.nodeB
         
@@ -675,7 +641,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             }
         }
     }
-    
     
     // MARK: - Eventos de la pantalla tactil
     
@@ -710,5 +675,4 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             return .all
         }
     }
-
 }
