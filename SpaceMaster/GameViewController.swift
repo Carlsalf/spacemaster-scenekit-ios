@@ -281,7 +281,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         label.fontColor = UIColor.orange
         label.horizontalAlignmentMode = .center
         label.verticalAlignmentMode = .center
-        label.position = CGPoint(x: view.bounds.midX, y: view.bounds.height - 50)
+        label.position = CGPoint(x: view.bounds.midX, y: view.bounds.height - 80)
+        label.zPosition = 100
         
         hud.addChild(label)
         view.overlaySKScene = hud
