@@ -11,6 +11,7 @@ import QuartzCore
 import SceneKit
 import SpriteKit
 import CoreMotion
+import AVFoundation
 
 public enum GameState {
     case title
@@ -104,6 +105,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         setupTitleAndGameOver()
         setupLights(inScene: scene)
         setupAsteroids(forView: scnView)
+        setupAudioSession()
         setupAudio(inScene: scene)
         setupView(scnView, withScene: scene)
         startTapRecognition(inView: scnView)
@@ -122,6 +124,19 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         setupLimits(forView: scnView)
         setupHUD(inView: scnView)
         showTitle()
+    }
+    
+    func setupAudioSession() {
+        do {
+            try AVAudioSession.sharedInstance().setCategory(
+                .playback,
+                mode: .default,
+                options: [.mixWithOthers]
+            )
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("Error setting audio session: \(error)")
+        }
     }
     
     func setupLights(inScene scene: SCNScene) {
@@ -221,18 +236,22 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     func setupAudio(inScene scene: SCNScene) {
         if let music = SCNAudioSource(fileNamed: "rolemusic_step_to_space.mp3") {
             music.loops = true
-            music.volume = 0.1
+            music.volume = 0.8
             music.isPositional = false
             music.shouldStream = true
             music.load()
             scene.rootNode.runAction(SCNAction.playAudio(music, waitForCompletion: false))
+        } else {
+            print("Error: background music file not found")
         }
         
         if let sound = SCNAudioSource(fileNamed: "bomb.wav") {
-            sound.volume = 10.0
+            sound.volume = 1.0
             sound.isPositional = true
             sound.load()
             self.soundExplosion = sound
+        } else {
+            print("Error: explosion sound file not found")
         }
     }
     
