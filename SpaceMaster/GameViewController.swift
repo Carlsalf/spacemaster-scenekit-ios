@@ -219,7 +219,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func setupAudio(inScene scene: SCNScene) {
-        if let music = SCNAudioSource(fileNamed: "Audio/rolemusic_step_to_space.mp3") {
+        if let music = SCNAudioSource(fileNamed: "rolemusic_step_to_space.mp3") {
             music.loops = true
             music.volume = 0.1
             music.isPositional = false
@@ -228,7 +228,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             scene.rootNode.runAction(SCNAction.playAudio(music, waitForCompletion: false))
         }
         
-        if let sound = SCNAudioSource(fileNamed: "Audio/bomb.wav") {
+        if let sound = SCNAudioSource(fileNamed: "bomb.wav") {
             sound.volume = 10.0
             sound.isPositional = true
             sound.load()
