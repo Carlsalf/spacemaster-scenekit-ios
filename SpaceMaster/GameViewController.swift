@@ -46,7 +46,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var asteroidModel : SCNNode?
     var explosion : SCNParticleSystem?
 
+    var backgroundMusicPlayer: AVAudioPlayer?
     var soundExplosion : SCNAudioSource?
+    var soundShipCrash : SCNAudioSource?
     var soundShot : SCNAudioSource?
 
     var numAsteroides : Int = 0
@@ -107,7 +109,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         setupLights(inScene: scene)
         setupAsteroids(forView: scnView)
         setupAudioSession()
-        setupAudio(inScene: scene)
+        setupAudio()
         setupView(scnView, withScene: scene)
         startTapRecognition(inView: scnView)
         startMotionUpdates()
@@ -138,6 +140,79 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         } catch {
             print("Error setting audio session: \(error)")
         }
+    }
+    
+    func setupAudio() {
+        if let url = Bundle.main.url(forResource: "rolemusic_step_to_space", withExtension: "mp3") {
+            do {
+                let player = try AVAudioPlayer(contentsOf: url)
+                player.numberOfLoops = -1
+                player.volume = 0.25
+                player.prepareToPlay()
+                self.backgroundMusicPlayer = player
+            } catch {
+                print("Error loading background music: \(error)")
+            }
+        } else {
+            print("Error: background music file not found")
+        }
+        
+        if let explosionSound = SCNAudioSource(fileNamed: "bomb.wav") {
+            explosionSound.volume = 1.0
+            explosionSound.isPositional = false
+            explosionSound.load()
+            self.soundExplosion = explosionSound
+        } else {
+            print("Error: explosion sound file not found")
+        }
+        
+        if let shipCrashSound = SCNAudioSource(fileNamed: "bomb.wav") {
+            shipCrashSound.volume = 1.8
+            shipCrashSound.isPositional = false
+            shipCrashSound.load()
+            self.soundShipCrash = shipCrashSound
+        } else {
+            print("Error: ship crash sound file not found")
+        }
+        
+        if let shotSound = SCNAudioSource(fileNamed: "bomb.wav") {
+            shotSound.volume = 0.18
+            shotSound.isPositional = false
+            shotSound.load()
+            self.soundShot = shotSound
+        } else {
+            print("Error: shot sound file not found")
+        }
+    }
+    
+    func playBackgroundMusic() {
+        guard let player = self.backgroundMusicPlayer else { return }
+        
+        if !player.isPlaying {
+            player.currentTime = 0
+            player.play()
+        }
+    }
+    
+    func stopBackgroundMusic() {
+        guard let player = self.backgroundMusicPlayer else { return }
+        
+        if player.isPlaying {
+            player.stop()
+            player.currentTime = 0
+        }
+    }
+    
+    func playSound(_ sound: SCNAudioSource?, at position: SCNVector3? = nil, duration: TimeInterval = 1.0) {
+        guard let scene = self.scene, let sound = sound else { return }
+        
+        let audioNode = SCNNode()
+        audioNode.name = "audioNode"
+        audioNode.position = position ?? SCNVector3Zero
+        
+        scene.rootNode.addChildNode(audioNode)
+        audioNode.runAction(.playAudio(sound, waitForCompletion: false))
+        audioNode.runAction(.sequence([.wait(duration: duration), .removeFromParentNode()]))
     }
     
     func setupLights(inScene scene: SCNScene) {
@@ -222,6 +297,18 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         resultsNode.scale = SCNVector3(0.30, 0.30, 0.30)
         gameOverGroup.addChildNode(resultsNode)
         
+        let restartText = SCNText(string: "TAP TO RESTART", extrusionDepth: 1.0)
+        restartText.font = UIFont(name: "University", size: 4) ?? UIFont.systemFont(ofSize: 4, weight: .bold)
+        restartText.flatness = 0.2
+        restartText.firstMaterial?.diffuse.contents = UIColor.orange
+        
+        let restartNode = SCNNode(geometry: restartText)
+        restartNode.name = "restartNode"
+        centerPivot(of: restartNode)
+        restartNode.position = SCNVector3(0, -5, -20)
+        restartNode.scale = SCNVector3(0.30, 0.30, 0.30)
+        gameOverGroup.addChildNode(restartNode)
+        
         scene.rootNode.addChildNode(gameOverGroup)
         self.gameOverGroup = gameOverGroup
     }
@@ -232,37 +319,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         let centerY = (minVec.y + maxVec.y) / 2.0
         let centerZ = (minVec.z + maxVec.z) / 2.0
         node.pivot = SCNMatrix4MakeTranslation(centerX, centerY, centerZ)
-    }
-    
-    func setupAudio(inScene scene: SCNScene) {
-        if let music = SCNAudioSource(fileNamed: "rolemusic_step_to_space.mp3") {
-            music.loops = true
-            music.volume = 0.25
-            music.isPositional = false
-            music.shouldStream = true
-            music.load()
-            scene.rootNode.runAction(SCNAction.playAudio(music, waitForCompletion: false))
-        } else {
-            print("Error: background music file not found")
-        }
-        
-        if let explosionSound = SCNAudioSource(fileNamed: "bomb.wav") {
-            explosionSound.volume = 1.0
-            explosionSound.isPositional = false
-            explosionSound.load()
-            self.soundExplosion = explosionSound
-        } else {
-            print("Error: explosion sound file not found")
-        }
-        
-        if let shotSound = SCNAudioSource(fileNamed: "bomb.wav") {
-            shotSound.volume = 0.18
-            shotSound.isPositional = false
-            shotSound.load()
-            self.soundShot = shotSound
-        } else {
-            print("Error: shot sound file not found")
-        }
     }
     
     func setupAsteroids(forView view: SCNView) {
@@ -369,14 +425,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     func shot() {
         guard gameState == .playing, let scene = self.scene, let ship = self.ship else { return }
         
-        if let soundShot = self.soundShot {
-            let audioNode = SCNNode()
-            audioNode.name = "shotAudioNode"
-            audioNode.position = ship.presentation.position
-            scene.rootNode.addChildNode(audioNode)
-            audioNode.runAction(.playAudio(soundShot, waitForCompletion: false))
-            audioNode.runAction(.sequence([.wait(duration: 0.5), .removeFromParentNode()]))
-        }
+        playSound(soundShot, at: ship.presentation.position, duration: 0.5)
         
         let sphere = SCNSphere(radius: 1.0)
         sphere.firstMaterial?.diffuse.contents = UIColor(red: 0.8, green: 0.7, blue: 0.2, alpha: 1.0)
@@ -404,6 +453,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         guard gameState == .playing else { return }
 
         showExplosion(onNode: asteroid)
+        playSound(soundExplosion, at: asteroid.presentation.position, duration: 1.0)
         
         asteroid.removeFromParentNode()
         bullet.removeFromParentNode()
@@ -417,6 +467,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         shipDestroyed = true
 
         showExplosion(onNode: ship)
+        playSound(soundShipCrash, at: ship.presentation.position, duration: 1.5)
 
         asteroid.removeFromParentNode()
         
@@ -440,15 +491,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             let remove = SCNAction.removeFromParentNode()
             explosionNode.runAction(.sequence([wait, remove]))
         }
-        
-        if let soundExplosion = self.soundExplosion {
-            let audioNode = SCNNode()
-            audioNode.name = "explosionAudioNode"
-            audioNode.position = node.presentation.position
-            scene?.rootNode.addChildNode(audioNode)
-            audioNode.runAction(.playAudio(soundExplosion, waitForCompletion: false))
-            audioNode.runAction(.sequence([.wait(duration: 1.0), .removeFromParentNode()]))
-        }
     }
     
     func clearGameNodes() {
@@ -458,8 +500,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             if node.name == "asteroid" ||
                 node.name == "bullet" ||
                 node.name == "explosionNode" ||
-                node.name == "explosionAudioNode" ||
-                node.name == "shotAudioNode" {
+                node.name == "audioNode" {
                 node.removeFromParentNode()
             }
         }
@@ -521,12 +562,16 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         ship?.isHidden = true
         ship?.position = SCNVector3(0, 0, 20)
         ship?.eulerAngles = SCNVector3Zero
+        
+        playBackgroundMusic()
     }
     
     func showGameOver() {
         guard gameState == .playing || gameState == .introduction else { return }
         
         gameState = .gameOver
+        stopBackgroundMusic()
+        
         hud?.isHidden = true
         gameOverGroup?.isHidden = false
         
@@ -541,14 +586,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         gameOverGroup?.opacity = 1.0
         gameOverGroup?.removeAllActions()
         
-        let move = SCNAction.move(to: SCNVector3(0, 0, -200), duration: 2.0)
-        move.timingMode = .easeOut
-        let fade = SCNAction.fadeOut(duration: 0.5)
-        let backToTitle = SCNAction.run { [weak self] _ in
-            self?.showTitle()
-        }
+        let wait = SCNAction.wait(duration: 0.15)
+        let pulseUp = SCNAction.scale(to: 1.05, duration: 0.25)
+        let pulseDown = SCNAction.scale(to: 1.0, duration: 0.25)
+        let pulse = SCNAction.repeatForever(.sequence([pulseUp, pulseDown]))
         
-        gameOverGroup?.runAction(.sequence([move, fade, backToTitle]))
+        gameOverGroup?.runAction(.sequence([wait, pulse]))
     }
     
     func startGame() {
@@ -557,6 +600,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         previousUpdateTime = nil
         timeToSpawn = 1.2
         
+        stopBackgroundMusic()
         clearGameNodes()
         
         titleGroup?.isHidden = true
@@ -652,6 +696,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         if gameState == .title {
             startGame()
+            return
+        }
+        
+        if gameState == .gameOver {
+            startGame()
+            return
         }
     }
     
