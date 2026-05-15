@@ -47,6 +47,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var explosion : SCNParticleSystem?
 
     var soundExplosion : SCNAudioSource?
+    var soundShot : SCNAudioSource?
 
     var numAsteroides : Int = 0
     var velocity : Float = 0.0
@@ -236,7 +237,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     func setupAudio(inScene scene: SCNScene) {
         if let music = SCNAudioSource(fileNamed: "rolemusic_step_to_space.mp3") {
             music.loops = true
-            music.volume = 0.8
+            music.volume = 0.25
             music.isPositional = false
             music.shouldStream = true
             music.load()
@@ -245,13 +246,22 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             print("Error: background music file not found")
         }
         
-        if let sound = SCNAudioSource(fileNamed: "bomb.wav") {
-            sound.volume = 1.0
-            sound.isPositional = true
-            sound.load()
-            self.soundExplosion = sound
+        if let explosionSound = SCNAudioSource(fileNamed: "bomb.wav") {
+            explosionSound.volume = 1.0
+            explosionSound.isPositional = false
+            explosionSound.load()
+            self.soundExplosion = explosionSound
         } else {
             print("Error: explosion sound file not found")
+        }
+        
+        if let shotSound = SCNAudioSource(fileNamed: "bomb.wav") {
+            shotSound.volume = 0.18
+            shotSound.isPositional = false
+            shotSound.load()
+            self.soundShot = shotSound
+        } else {
+            print("Error: shot sound file not found")
         }
     }
     
@@ -359,6 +369,15 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     func shot() {
         guard gameState == .playing, let scene = self.scene, let ship = self.ship else { return }
         
+        if let soundShot = self.soundShot {
+            let audioNode = SCNNode()
+            audioNode.name = "shotAudioNode"
+            audioNode.position = ship.presentation.position
+            scene.rootNode.addChildNode(audioNode)
+            audioNode.runAction(.playAudio(soundShot, waitForCompletion: false))
+            audioNode.runAction(.sequence([.wait(duration: 0.5), .removeFromParentNode()]))
+        }
+        
         let sphere = SCNSphere(radius: 1.0)
         sphere.firstMaterial?.diffuse.contents = UIColor(red: 0.8, green: 0.7, blue: 0.2, alpha: 1.0)
         sphere.firstMaterial?.emission.contents = UIColor(red: 0.8, green: 0.7, blue: 0.2, alpha: 1.0)
@@ -439,7 +458,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             if node.name == "asteroid" ||
                 node.name == "bullet" ||
                 node.name == "explosionNode" ||
-                node.name == "explosionAudioNode" {
+                node.name == "explosionAudioNode" ||
+                node.name == "shotAudioNode" {
                 node.removeFromParentNode()
             }
         }
