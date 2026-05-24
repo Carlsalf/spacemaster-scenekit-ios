@@ -30,6 +30,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
     var hud : SKScene?
     var marcadorAsteroides : SKLabelNode?
+    var marcadorBest : SKLabelNode?
+    var bestScore: Int = UserDefaults.standard.integer(forKey: "BEST_SCORE")
 
     var titleGroup : SCNNode?
     var gameOverGroup : SCNNode?
@@ -54,6 +56,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var numAsteroides : Int = 0
     var velocity : Float = 0.0
     var shipDestroyed : Bool = false
+    var collisionProcessing : Bool = false
 
     let spawnInterval : Float = 0.65
     var timeToSpawn : TimeInterval = 1.0
@@ -365,23 +368,40 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         hud.scaleMode = .resizeFill
         hud.backgroundColor = .clear
         
-        let label = SKLabelNode(fontNamed: "University")
-        label.text = "0 HITS"
-        label.fontSize = 44
-        label.fontColor = UIColor.orange
-        label.horizontalAlignmentMode = .center
-        label.verticalAlignmentMode = .center
-        label.position = CGPoint(x: view.bounds.midX, y: view.bounds.height - 80)
-        label.zPosition = 100
+        let scoreLabel = SKLabelNode(fontNamed: "University")
+        scoreLabel.text = "0 HITS"
+        scoreLabel.fontSize = 40
+        scoreLabel.fontColor = UIColor.orange
+        scoreLabel.horizontalAlignmentMode = .left
+        scoreLabel.verticalAlignmentMode = .center
+        scoreLabel.position = CGPoint(x: 44, y: view.bounds.height - 80)
+        scoreLabel.zPosition = 100
         
-        hud.addChild(label)
+        hud.addChild(scoreLabel)
+        self.marcadorAsteroides = scoreLabel
+        
+        let bestLabel = SKLabelNode(fontNamed: "University")
+        bestLabel.text = "BEST \(bestScore)"
+        bestLabel.fontSize = 34
+        bestLabel.fontColor = UIColor.white
+        bestLabel.horizontalAlignmentMode = .right
+        bestLabel.verticalAlignmentMode = .center
+        bestLabel.position = CGPoint(x: view.bounds.width - 44, y: view.bounds.height - 80)
+        bestLabel.zPosition = 100
+        
+        hud.addChild(bestLabel)
+        self.marcadorBest = bestLabel
+        
         view.overlaySKScene = hud
-        
-        self.marcadorAsteroides = label
         self.hud = hud
         self.hud?.isHidden = gameState != .playing
     }
 
+    func updateScoreHUD() {
+        marcadorAsteroides?.text = "\(numAsteroides) HITS"
+        marcadorBest?.text = "BEST \(bestScore)"
+    }
+    
     func startTapRecognition(inView view: SCNView) {
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         view.addGestureRecognizer(tap)
@@ -457,30 +477,61 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     func destroyAsteroid(asteroid: SCNNode, withBullet bullet: SCNNode) {
         guard gameState == .playing else { return }
 
-        showAsteroidExplosion(onNode: asteroid)
-        playSound(soundExplosion, at: asteroid.presentation.position, duration: 1.0)
-        
-        asteroid.removeFromParentNode()
+        guard asteroid.parent != nil,
+              bullet.parent != nil,
+              asteroid.name == "asteroid",
+              bullet.name == "bullet" else { return }
+
+        // Bloqueo inmediato para evitar doble procesamiento en frames consecutivos.
+        asteroid.name = "destroyingAsteroid"
+        bullet.name = "destroyingBullet"
+
+        let explosionPosition = asteroid.presentation.position
+
+        asteroid.physicsBody = nil
+        bullet.physicsBody = nil
+        asteroid.removeAllActions()
+        bullet.removeAllActions()
+
+        // Primero se eliminan los nodos de juego.
+        // La explosión se crea después en una posición independiente,
+        // evitando referencias inválidas de SceneKit/CFRetain.
         bullet.removeFromParentNode()
-        
+        asteroid.removeFromParentNode()
+
         numAsteroides += 1
-        marcadorAsteroides?.text = "\(numAsteroides) HITS"
+        if numAsteroides > bestScore {
+            bestScore = numAsteroides
+            UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
+        }
+        updateScoreHUD()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
+            guard let self = self, self.gameState == .playing else { return }
+            self.showExplosion(at: explosionPosition, isShipExplosion: false)
+            self.playSound(self.soundExplosion, at: explosionPosition, duration: 1.0)
+        }
     }
-    
+
     func destroyShip(ship: SCNNode, withAsteroid asteroid: SCNNode) {
-        guard gameState == .playing, shipDestroyed == false else { return }
+        guard gameState == .playing,
+              shipDestroyed == false,
+              asteroid.parent != nil,
+              asteroid.name == "asteroid" else { return }
         shipDestroyed = true
 
         let crashPosition = ship.presentation.position
-        
+
+        asteroid.name = "destroyingAsteroid"
+        asteroid.physicsBody = nil
         asteroid.removeAllActions()
         asteroid.removeFromParentNode()
-        
-        showShipExplosion(onNode: ship)
+
+        showExplosion(at: crashPosition, isShipExplosion: true)
         playSound(soundShipCrash, at: crashPosition, duration: 1.5)
-        
+
         ship.removeAllActions()
-        
+
         let shakeLeft = SCNAction.moveBy(x: -1.2, y: 0, z: 0, duration: 0.06)
         let shakeRight = SCNAction.moveBy(x: 2.4, y: 0, z: 0, duration: 0.06)
         let shakeBack = SCNAction.moveBy(x: -1.2, y: 0, z: 0, duration: 0.06)
@@ -491,7 +542,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         let finish = SCNAction.run { [weak self] _ in
             self?.showGameOver()
         }
-        
+
         ship.runAction(.sequence([
             shakeLeft,
             shakeRight,
@@ -501,120 +552,139 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             finish
         ]))
     }
-    func showAsteroidExplosion(onNode node: SCNNode) {
-        showExplosionEffect(
-            at: node.presentation.position,
-            radius: 0.18,
-            particleSize: 0.045,
-            sparkBirthRate: 300,
-            emberBirthRate: 80,
-            smokeBirthRate: 30,
-            lightIntensity: 360,
-            duration: 0.34,
-            isShipExplosion: false
-        )
+    func showExplosion(onNode node: SCNNode) {
+        showExplosion(at: node.presentation.position, isShipExplosion: node.name == "ship")
     }
 
-    func showShipExplosion(onNode node: SCNNode) {
-        showExplosionEffect(
-            at: node.presentation.position,
-            radius: 0.38,
-            particleSize: 0.075,
-            sparkBirthRate: 620,
-            emberBirthRate: 160,
-            smokeBirthRate: 70,
-            lightIntensity: 950,
-            duration: 0.70,
-            isShipExplosion: true
-        )
-    }
-
-    func showExplosionEffect(
-        at position: SCNVector3,
-        radius: CGFloat,
-        particleSize: CGFloat,
-        sparkBirthRate: CGFloat,
-        emberBirthRate: CGFloat,
-        smokeBirthRate: CGFloat,
-        lightIntensity: CGFloat,
-        duration: TimeInterval,
-        isShipExplosion: Bool
-    ) {
+    func showExplosion(at position: SCNVector3, isShipExplosion: Bool) {
         guard let scene = self.scene else { return }
 
-        let explosionNode = SCNNode()
-        explosionNode.name = "explosionNode"
-        explosionNode.position = position
-        explosionNode.scale = SCNVector3(0.55, 0.55, 0.55)
-        scene.rootNode.addChildNode(explosionNode)
+        let explosionGroup = SCNNode()
+        explosionGroup.name = "explosionNode"
+        explosionGroup.position = position
+        scene.rootNode.addChildNode(explosionGroup)
 
-        // Sparks: small fast particles. No solid flash geometry is used,
-        // so the effect does not become a yellow ball.
-        let sparks = SCNParticleSystem()
-        sparks.birthRate = sparkBirthRate
-        sparks.emissionDuration = 0.045
-        sparks.loops = false
-        sparks.particleLifeSpan = duration
-        sparks.particleLifeSpanVariation = 0.28
-        sparks.particleVelocity = isShipExplosion ? 22.0 : 13.0
-        sparks.particleVelocityVariation = isShipExplosion ? 12.0 : 7.0
-        sparks.spreadingAngle = 180
-        sparks.particleSize = particleSize
-        sparks.particleSizeVariation = particleSize * 0.9
-        sparks.blendMode = .additive
-        sparks.birthDirection = .random
-        sparks.particleColor = UIColor(red: 1.0, green: 0.42, blue: 0.05, alpha: 0.95)
-        sparks.particleColorVariation = SCNVector4(0.18, 0.16, 0.04, 0.15)
-        sparks.emitterShape = SCNSphere(radius: radius)
-        sparks.isAffectedByGravity = false
-        sparks.dampingFactor = 0.05
-        explosionNode.addParticleSystem(sparks)
+        // Explosión estable sin SCNParticleSystem para evitar el crash CFRetain.
+        // Se usan nodos independientes: más impacto visual, sin esfera amarilla sólida.
+        let sparkCount = isShipExplosion ? 52 : 42
+        let sparkRadiusRange: ClosedRange<CGFloat> = isShipExplosion ? 0.075...0.145 : 0.050...0.100
+        let spread: Float = isShipExplosion ? 7.0 : 4.8
+        let duration: TimeInterval = isShipExplosion ? 0.90 : 0.66
 
-        // Embers: slower particles with softer orange color to give the explosion volume.
-        let embers = SCNParticleSystem()
-        embers.birthRate = emberBirthRate
-        embers.emissionDuration = 0.075
-        embers.loops = false
-        embers.particleLifeSpan = duration * 1.05
-        embers.particleLifeSpanVariation = 0.35
-        embers.particleVelocity = isShipExplosion ? 9.0 : 5.0
-        embers.particleVelocityVariation = isShipExplosion ? 5.0 : 2.5
-        embers.spreadingAngle = 170
-        embers.particleSize = particleSize * 1.35
-        embers.particleSizeVariation = particleSize * 0.85
-        embers.blendMode = .additive
-        embers.birthDirection = .random
-        embers.particleColor = UIColor(red: 1.0, green: 0.66, blue: 0.14, alpha: 0.70)
-        embers.particleColorVariation = SCNVector4(0.12, 0.10, 0.03, 0.22)
-        embers.emitterShape = SCNSphere(radius: radius * 0.45)
-        embers.isAffectedByGravity = false
-        embers.dampingFactor = 0.16
-        explosionNode.addParticleSystem(embers)
+        let colors: [UIColor] = [
+            UIColor(red: 1.0, green: 0.90, blue: 0.18, alpha: 1.0),
+            UIColor(red: 1.0, green: 0.55, blue: 0.06, alpha: 1.0),
+            UIColor(red: 1.0, green: 0.25, blue: 0.02, alpha: 1.0),
+            UIColor(red: 1.0, green: 0.98, blue: 0.65, alpha: 1.0)
+        ]
 
-        // Smoke: very subtle and transparent; avoids the gray block in the center.
-        let smoke = SCNParticleSystem()
-        smoke.birthRate = smokeBirthRate
-        smoke.emissionDuration = 0.10
-        smoke.loops = false
-        smoke.particleLifeSpan = duration * 1.35
-        smoke.particleLifeSpanVariation = 0.35
-        smoke.particleVelocity = isShipExplosion ? 2.2 : 1.3
-        smoke.particleVelocityVariation = 1.0
-        smoke.spreadingAngle = 130
-        smoke.particleSize = isShipExplosion ? particleSize * 2.2 : particleSize * 1.5
-        smoke.particleSizeVariation = particleSize * 0.8
-        smoke.birthDirection = .random
-        smoke.emitterShape = SCNSphere(radius: radius * 0.25)
-        smoke.isAffectedByGravity = false
-        smoke.blendMode = .alpha
-        smoke.particleColor = UIColor(white: 0.42, alpha: 0.10)
-        explosionNode.addParticleSystem(smoke)
+        for index in 0..<sparkCount {
+            let sparkGeometry = SCNSphere(radius: CGFloat.random(in: sparkRadiusRange))
+            sparkGeometry.segmentCount = 6
 
-        // Short orange light pulse. It gives impact without creating a visible sphere.
+            let material = SCNMaterial()
+            material.diffuse.contents = colors[index % colors.count]
+            material.emission.contents = colors[index % colors.count]
+            material.lightingModel = .constant
+            sparkGeometry.materials = [material]
+
+            let sparkNode = SCNNode(geometry: sparkGeometry)
+            sparkNode.name = "explosionSpark"
+            sparkNode.position = SCNVector3Zero
+            explosionGroup.addChildNode(sparkNode)
+
+            let angle = Float.random(in: 0...(Float.pi * 2.0))
+            let vertical = Float.random(in: -1.0...1.0)
+            let distance = Float.random(in: spread * 0.20...spread)
+
+            let dx = cos(angle) * distance
+            let dy = vertical * distance * 0.38
+            let dz = sin(angle) * distance
+
+            let move = SCNAction.moveBy(
+                x: CGFloat(dx),
+                y: CGFloat(dy),
+                z: CGFloat(dz),
+                duration: duration
+            )
+            move.timingMode = .easeOut
+
+            let scale = SCNAction.scale(to: 0.01, duration: duration)
+            let fade = SCNAction.fadeOpacity(to: 0.0, duration: duration)
+            let remove = SCNAction.removeFromParentNode()
+
+            sparkNode.runAction(.sequence([
+                .group([move, scale, fade]),
+                remove
+            ]))
+        }
+
+        // Micro-destello: puntos breves y pequeños para dar fuerza sin volver al bloque amarillo.
+        let flashCount = isShipExplosion ? 10 : 7
+        for _ in 0..<flashCount {
+            let flashGeometry = SCNSphere(radius: isShipExplosion ? 0.12 : 0.085)
+            flashGeometry.segmentCount = 6
+
+            let flashMaterial = SCNMaterial()
+            flashMaterial.diffuse.contents = UIColor(red: 1.0, green: 0.88, blue: 0.12, alpha: 0.9)
+            flashMaterial.emission.contents = UIColor(red: 1.0, green: 0.70, blue: 0.04, alpha: 1.0)
+            flashMaterial.lightingModel = .constant
+            flashGeometry.materials = [flashMaterial]
+
+            let flashNode = SCNNode(geometry: flashGeometry)
+            flashNode.name = "explosionFlash"
+            flashNode.position = SCNVector3(
+                Float.random(in: -0.35...0.35),
+                Float.random(in: -0.14...0.14),
+                Float.random(in: -0.35...0.35)
+            )
+            explosionGroup.addChildNode(flashNode)
+
+            flashNode.runAction(.sequence([
+                .group([
+                    .scale(to: isShipExplosion ? 1.65 : 1.18, duration: 0.07),
+                    .fadeOpacity(to: 0.0, duration: 0.13)
+                ]),
+                .removeFromParentNode()
+            ]))
+        }
+
+        // Humo suave: un poco más visible, pero sin tapar la escena.
+        let smokeCount = isShipExplosion ? 8 : 4
+        for _ in 0..<smokeCount {
+            let smokeGeometry = SCNSphere(radius: CGFloat.random(in: isShipExplosion ? 0.10...0.18 : 0.065...0.115))
+            smokeGeometry.segmentCount = 8
+
+            let smokeMaterial = SCNMaterial()
+            smokeMaterial.diffuse.contents = UIColor(white: 0.34, alpha: 0.18)
+            smokeMaterial.emission.contents = UIColor(white: 0.13, alpha: 0.08)
+            smokeMaterial.lightingModel = .constant
+            smokeGeometry.materials = [smokeMaterial]
+
+            let smokeNode = SCNNode(geometry: smokeGeometry)
+            smokeNode.name = "explosionSmoke"
+            smokeNode.opacity = isShipExplosion ? 0.36 : 0.24
+            smokeNode.position = SCNVector3Zero
+            explosionGroup.addChildNode(smokeNode)
+
+            let dx = CGFloat.random(in: -1.05...1.05)
+            let dy = CGFloat.random(in: -0.30...0.30)
+            let dz = CGFloat.random(in: -1.05...1.05)
+
+            smokeNode.runAction(.sequence([
+                .group([
+                    .moveBy(x: dx, y: dy, z: dz, duration: isShipExplosion ? 0.90 : 0.62),
+                    .scale(to: isShipExplosion ? 2.1 : 1.45, duration: isShipExplosion ? 0.90 : 0.62),
+                    .fadeOpacity(to: 0.0, duration: isShipExplosion ? 0.90 : 0.62)
+                ]),
+                .removeFromParentNode()
+            ]))
+        }
+
         let light = SCNLight()
         light.type = .omni
         light.color = UIColor.orange
-        light.intensity = lightIntensity
+        light.intensity = isShipExplosion ? 1300 : 560
 
         let lightNode = SCNNode()
         lightNode.name = "explosionLight"
@@ -622,9 +692,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         lightNode.position = position
         scene.rootNode.addChildNode(lightNode)
 
-        let fadeLight = SCNAction.customAction(duration: 0.16) { node, elapsedTime in
-            let progress = CGFloat(elapsedTime / 0.16)
-            node.light?.intensity = lightIntensity * max(0.0, 1.0 - progress)
+        let initialIntensity = light.intensity
+        let lightDuration: TimeInterval = isShipExplosion ? 0.26 : 0.20
+        let fadeLight = SCNAction.customAction(duration: lightDuration) { node, elapsedTime in
+            let progress = CGFloat(elapsedTime / lightDuration)
+            node.light?.intensity = initialIntensity * max(0.0, 1.0 - progress)
         }
 
         lightNode.runAction(.sequence([
@@ -632,11 +704,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             .removeFromParentNode()
         ]))
 
-        explosionNode.runAction(.sequence([
-            .group([
-                .scale(to: isShipExplosion ? 2.35 : 1.70, duration: 0.20),
-                .fadeOpacity(to: 0.0, duration: duration + 0.10)
-            ]),
+        explosionGroup.runAction(.sequence([
+            .wait(duration: isShipExplosion ? 1.10 : 0.76),
             .removeFromParentNode()
         ]))
     }
@@ -668,29 +737,55 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
     func checkManualCollisions() {
         guard gameState == .playing,
+              collisionProcessing == false,
               let rootNode = scene?.rootNode,
               let ship = self.ship else { return }
-        
+
         let bullets = rootNode.childNodes.filter { $0.name == "bullet" }
         let asteroids = rootNode.childNodes.filter { $0.name == "asteroid" }
-        
+
         for bullet in bullets {
             for asteroid in asteroids {
-                if bullet.parent != nil && asteroid.parent != nil {
-                    if distanceBetween(bullet, asteroid) < 8.0 {
-                        destroyAsteroid(asteroid: asteroid, withBullet: bullet)
-                        return
+                guard bullet.parent != nil,
+                      asteroid.parent != nil,
+                      bullet.name == "bullet",
+                      asteroid.name == "asteroid" else { continue }
+
+                if distanceBetween(bullet, asteroid) < 8.0 {
+                    collisionProcessing = true
+
+                    DispatchQueue.main.async { [weak self, weak asteroid, weak bullet] in
+                        guard let self = self else { return }
+                        defer { self.collisionProcessing = false }
+
+                        guard let asteroid = asteroid,
+                              let bullet = bullet else { return }
+
+                        self.destroyAsteroid(asteroid: asteroid, withBullet: bullet)
                     }
+                    return
                 }
             }
         }
-        
+
         for asteroid in asteroids {
-            if asteroid.parent != nil && shipDestroyed == false {
-                if distanceBetween(ship, asteroid) < 8.0 {
-                    destroyShip(ship: ship, withAsteroid: asteroid)
-                    return
+            guard asteroid.parent != nil,
+                  asteroid.name == "asteroid",
+                  shipDestroyed == false else { continue }
+
+            if distanceBetween(ship, asteroid) < 8.0 {
+                collisionProcessing = true
+
+                DispatchQueue.main.async { [weak self, weak ship, weak asteroid] in
+                    guard let self = self else { return }
+                    defer { self.collisionProcessing = false }
+
+                    guard let ship = ship,
+                          let asteroid = asteroid else { return }
+
+                    self.destroyShip(ship: ship, withAsteroid: asteroid)
                 }
+                return
             }
         }
     }
@@ -698,6 +793,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     func showTitle() {
         gameState = .title
         shipDestroyed = false
+        collisionProcessing = false
         previousUpdateTime = nil
         timeToSpawn = TimeInterval(spawnInterval)
         
@@ -724,7 +820,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         hud?.isHidden = true
         gameOverGroup?.isHidden = false
         
-        gameOverResultsText?.string = "\(numAsteroides) ASTEROIDS DESTROYED"
+        let newRecord = numAsteroides >= bestScore && numAsteroides > 0
+        var resultText = "SCORE: \(numAsteroides)\nBEST: \(bestScore)"
+        if newRecord {
+            resultText += "\nNEW RECORD!"
+        }
+        gameOverResultsText?.string = resultText
         if let resultsNode = gameOverGroup?.childNode(withName: "resultsNode", recursively: false) {
             centerPivot(of: resultsNode)
         }
@@ -746,6 +847,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     func startGame() {
         gameState = .introduction
         shipDestroyed = false
+        collisionProcessing = false
         previousUpdateTime = nil
         timeToSpawn = 1.2
         
@@ -758,7 +860,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         ship?.isHidden = false
         
         numAsteroides = 0
-        marcadorAsteroides?.text = "0 HITS"
+        updateScoreHUD()
         
         ship?.removeAllActions()
         ship?.position = SCNVector3(0, 0, 45)
@@ -804,36 +906,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
-        guard gameState == .playing else { return }
-        
-        let nodeA = contact.nodeA
-        let nodeB = contact.nodeB
-        
-        let maskA = nodeA.physicsBody?.categoryBitMask ?? 0
-        let maskB = nodeB.physicsBody?.categoryBitMask ?? 0
-        
-        if (maskA == categoryMaskShot && maskB == categoryMaskAsteroid) ||
-            (maskA == categoryMaskAsteroid && maskB == categoryMaskShot) {
-            
-            let bullet = maskA == categoryMaskShot ? nodeA : nodeB
-            let asteroid = maskA == categoryMaskAsteroid ? nodeA : nodeB
-            
-            DispatchQueue.main.async { [weak self] in
-                self?.destroyAsteroid(asteroid: asteroid, withBullet: bullet)
-            }
-            return
-        }
-        
-        if (maskA == categoryMaskShip && maskB == categoryMaskAsteroid) ||
-            (maskA == categoryMaskAsteroid && maskB == categoryMaskShip) {
-            
-            let ship = maskA == categoryMaskShip ? nodeA : nodeB
-            let asteroid = maskA == categoryMaskAsteroid ? nodeA : nodeB
-            
-            DispatchQueue.main.async { [weak self] in
-                self?.destroyShip(ship: ship, withAsteroid: asteroid)
-            }
-        }
+        // Las colisiones se gestionan manualmente en checkManualCollisions().
+        // Se deja vacío para evitar dobles eventos sobre los mismos nodos.
     }
     
     @objc
