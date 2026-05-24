@@ -369,20 +369,20 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         hud.scaleMode = .resizeFill
         hud.backgroundColor = .clear
 
-        // HUD final optimizado para iPhone vertical:
-        // HITS izquierda, BEST derecha y LVL centrado en segunda línea.
-        // Se reduce ligeramente el tamaño para evitar solapes con puntuaciones de 2 dígitos.
-        let topY = view.bounds.height - 105
-        let levelY = view.bounds.height - 165
-        let horizontalMargin: CGFloat = 36
+        // HUD final en dos líneas para evitar solapes en iPhone vertical:
+        // HITS izquierda, BEST derecha, LVL centrado debajo.
+        let safeTop = view.safeAreaInsets.top
+        let topY = view.bounds.height - max(86, safeTop + 60)
+        let levelY = topY - 62
+        let sideMargin: CGFloat = 26
 
         let scoreLabel = SKLabelNode(fontNamed: "University")
         scoreLabel.text = "0 HITS"
-        scoreLabel.fontSize = 32
+        scoreLabel.fontSize = 30
         scoreLabel.fontColor = UIColor.orange
         scoreLabel.horizontalAlignmentMode = .left
         scoreLabel.verticalAlignmentMode = .center
-        scoreLabel.position = CGPoint(x: horizontalMargin, y: topY)
+        scoreLabel.position = CGPoint(x: sideMargin, y: topY)
         scoreLabel.zPosition = 100
 
         hud.addChild(scoreLabel)
@@ -390,11 +390,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         let bestLabel = SKLabelNode(fontNamed: "University")
         bestLabel.text = "BEST \(bestScore)"
-        bestLabel.fontSize = 32
+        bestLabel.fontSize = 30
         bestLabel.fontColor = UIColor.white
         bestLabel.horizontalAlignmentMode = .right
         bestLabel.verticalAlignmentMode = .center
-        bestLabel.position = CGPoint(x: view.bounds.width - horizontalMargin, y: topY)
+        bestLabel.position = CGPoint(x: view.bounds.width - sideMargin, y: topY)
         bestLabel.zPosition = 100
 
         hud.addChild(bestLabel)
@@ -402,7 +402,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         let levelLabel = SKLabelNode(fontNamed: "University")
         levelLabel.text = "LVL 1"
-        levelLabel.fontSize = 30
+        levelLabel.fontSize = 34
         levelLabel.fontColor = UIColor(red: 0.95, green: 0.85, blue: 0.25, alpha: 1.0)
         levelLabel.horizontalAlignmentMode = .center
         levelLabel.verticalAlignmentMode = .center
@@ -438,6 +438,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         marcadorAsteroides?.text = "\(numAsteroides) HITS"
         marcadorBest?.text = "BEST \(bestScore)"
         marcadorLevel?.text = "LVL \(currentLevel())"
+
+        // Ajuste responsivo: mantiene el HUD legible sin que HITS invada BEST.
+        marcadorAsteroides?.fontSize = numAsteroides >= 100 ? 24 : (numAsteroides >= 10 ? 28 : 30)
+        marcadorBest?.fontSize = bestScore >= 100 ? 24 : 30
+        marcadorLevel?.fontSize = 34
     }
 
     func startTapRecognition(inView view: SCNView) {
