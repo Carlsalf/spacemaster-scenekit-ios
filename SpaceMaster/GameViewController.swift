@@ -369,18 +369,20 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         hud.scaleMode = .resizeFill
         hud.backgroundColor = .clear
 
-        // HUD final alineado para pantalla vertical:
-        // HITS a la izquierda, BEST a la derecha y LVL centrado debajo.
-        let topY = view.bounds.height - 95
-        let levelY = view.bounds.height - 155
+        // HUD final optimizado para iPhone vertical:
+        // HITS izquierda, BEST derecha y LVL centrado en segunda línea.
+        // Se reduce ligeramente el tamaño para evitar solapes con puntuaciones de 2 dígitos.
+        let topY = view.bounds.height - 105
+        let levelY = view.bounds.height - 165
+        let horizontalMargin: CGFloat = 36
 
         let scoreLabel = SKLabelNode(fontNamed: "University")
         scoreLabel.text = "0 HITS"
-        scoreLabel.fontSize = 38
+        scoreLabel.fontSize = 32
         scoreLabel.fontColor = UIColor.orange
         scoreLabel.horizontalAlignmentMode = .left
         scoreLabel.verticalAlignmentMode = .center
-        scoreLabel.position = CGPoint(x: 45, y: topY)
+        scoreLabel.position = CGPoint(x: horizontalMargin, y: topY)
         scoreLabel.zPosition = 100
 
         hud.addChild(scoreLabel)
@@ -388,11 +390,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         let bestLabel = SKLabelNode(fontNamed: "University")
         bestLabel.text = "BEST \(bestScore)"
-        bestLabel.fontSize = 38
+        bestLabel.fontSize = 32
         bestLabel.fontColor = UIColor.white
         bestLabel.horizontalAlignmentMode = .right
         bestLabel.verticalAlignmentMode = .center
-        bestLabel.position = CGPoint(x: view.bounds.width - 45, y: topY)
+        bestLabel.position = CGPoint(x: view.bounds.width - horizontalMargin, y: topY)
         bestLabel.zPosition = 100
 
         hud.addChild(bestLabel)
@@ -400,7 +402,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         let levelLabel = SKLabelNode(fontNamed: "University")
         levelLabel.text = "LVL 1"
-        levelLabel.fontSize = 34
+        levelLabel.fontSize = 30
         levelLabel.fontColor = UIColor(red: 0.95, green: 0.85, blue: 0.25, alpha: 1.0)
         levelLabel.horizontalAlignmentMode = .center
         levelLabel.verticalAlignmentMode = .center
