@@ -45,6 +45,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     let achievement25HitsID = "spacemaster_25_hits"
     let achievement50HitsID = "spacemaster_50_hits"
     let achievementLevel5ID = "spacemaster_level_5"
+    let achievementSurvivorID = "spacemaster_survivor"
+    let achievementNewRecordID = "spacemaster_new_record"
+    let achievementMasterPilotID = "spacemaster_master_pilot"
 
     var titleGroup : SCNNode?
     var gameOverGroup : SCNNode?
