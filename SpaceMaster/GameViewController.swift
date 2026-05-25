@@ -12,6 +12,7 @@ import SceneKit
 import SpriteKit
 import CoreMotion
 import AVFoundation
+import GameKit
 
 public enum GameState {
     case title
@@ -35,6 +36,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var damageFlashOverlay : SKShapeNode?
     var lastDisplayedLevel : Int = 1
     var bestScore: Int = UserDefaults.standard.integer(forKey: "BEST_SCORE")
+    var gameCenterEnabled: Bool = false
 
     var titleGroup : SCNNode?
     var gameOverGroup : SCNNode?
@@ -67,6 +69,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
     override func viewDidLoad() {
         super.viewDidLoad()
+
+        authenticateGameCenter()
 
         let scnView = self.view as! SCNView
 
@@ -140,6 +144,28 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         showTitle()
     }
     
+
+    func authenticateGameCenter() {
+        GKLocalPlayer.local.authenticateHandler = { [weak self] viewController, error in
+            if let viewController = viewController {
+                self?.present(viewController, animated: true)
+                return
+            }
+
+            if GKLocalPlayer.local.isAuthenticated {
+                self?.gameCenterEnabled = true
+                print("✅ Game Center conectado")
+            } else {
+                self?.gameCenterEnabled = false
+                print("❌ Game Center no autenticado")
+
+                if let error = error {
+                    print("Game Center error: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
     func setupAudioSession() {
         do {
             try AVAudioSession.sharedInstance().setCategory(
@@ -215,15 +241,17 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func playSound(_ sound: SCNAudioSource?, at position: SCNVector3? = nil, duration: TimeInterval = 1.0) {
-        guard let scene = self.scene, let sound = sound else { return }
-        
-        let audioNode = SCNNode()
-        audioNode.name = "audioNode"
-        audioNode.position = position ?? SCNVector3Zero
-        
-        scene.rootNode.addChildNode(audioNode)
-        audioNode.runAction(.playAudio(sound, waitForCompletion: false))
-        audioNode.runAction(.sequence([.wait(duration: duration), .removeFromParentNode()]))
+        guard let sound = sound else { return }
+
+        // Reproduce el audio sin crear nodos temporales en la escena.
+        // Esto evita crashes tipo CFRetain/addChildNode cuando se destruyen
+        // varios asteroides en rápida sucesión durante el render/update loop.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self,
+                  let rootNode = self.scene?.rootNode else { return }
+
+            rootNode.runAction(SCNAction.playAudio(sound, waitForCompletion: false))
+        }
     }
     
     func setupLights(inScene scene: SCNScene) {
