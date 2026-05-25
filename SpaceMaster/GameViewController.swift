@@ -379,29 +379,29 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         let scoreLabel = SKLabelNode(fontNamed: "University")
         scoreLabel.text = "0 HITS"
-        scoreLabel.fontSize = 38
+        scoreLabel.fontSize = 32
         scoreLabel.fontColor = UIColor.orange
         scoreLabel.horizontalAlignmentMode = .left
         scoreLabel.verticalAlignmentMode = .center
-        scoreLabel.position = CGPoint(x: 44, y: topY)
+        scoreLabel.position = CGPoint(x: 34, y: topY)
         scoreLabel.zPosition = 100
         hud.addChild(scoreLabel)
         self.marcadorAsteroides = scoreLabel
 
         let bestLabel = SKLabelNode(fontNamed: "University")
         bestLabel.text = "BEST \(bestScore)"
-        bestLabel.fontSize = 34
+        bestLabel.fontSize = 32
         bestLabel.fontColor = UIColor.white
         bestLabel.horizontalAlignmentMode = .right
         bestLabel.verticalAlignmentMode = .center
-        bestLabel.position = CGPoint(x: view.bounds.width - 44, y: topY)
+        bestLabel.position = CGPoint(x: view.bounds.width - 34, y: topY)
         bestLabel.zPosition = 100
         hud.addChild(bestLabel)
         self.marcadorBest = bestLabel
 
         let levelLabel = SKLabelNode(fontNamed: "University")
         levelLabel.text = "LVL 1"
-        levelLabel.fontSize = 38
+        levelLabel.fontSize = 34
         levelLabel.fontColor = UIColor.yellow
         levelLabel.horizontalAlignmentMode = .center
         levelLabel.verticalAlignmentMode = .center
@@ -431,6 +431,21 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         marcadorAsteroides?.text = "\(numAsteroides) HITS"
         marcadorBest?.text = "BEST \(bestScore)"
         marcadorLevel?.text = "LVL \(level)"
+
+        // Ajuste defensivo para mantener el HUD sin solapes con puntuaciones altas.
+        if numAsteroides >= 100 || bestScore >= 100 {
+            marcadorAsteroides?.fontSize = 27
+            marcadorBest?.fontSize = 27
+            marcadorLevel?.fontSize = 32
+        } else if numAsteroides >= 10 || bestScore >= 10 {
+            marcadorAsteroides?.fontSize = 32
+            marcadorBest?.fontSize = 32
+            marcadorLevel?.fontSize = 34
+        } else {
+            marcadorAsteroides?.fontSize = 34
+            marcadorBest?.fontSize = 34
+            marcadorLevel?.fontSize = 34
+        }
 
         if level > lastDisplayedLevel && gameState == .playing {
             lastDisplayedLevel = level
@@ -600,20 +615,20 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         let levelUpLabel = SKLabelNode(fontNamed: "University")
         levelUpLabel.text = "LEVEL \(level)"
-        levelUpLabel.fontSize = 44
+        levelUpLabel.fontSize = 40
         levelUpLabel.fontColor = UIColor.yellow
         levelUpLabel.horizontalAlignmentMode = .center
         levelUpLabel.verticalAlignmentMode = .center
-        levelUpLabel.position = CGPoint(x: hud.size.width / 2.0, y: hud.size.height * 0.58)
+        levelUpLabel.position = CGPoint(x: hud.size.width / 2.0, y: hud.size.height * 0.55)
         levelUpLabel.zPosition = 300
         levelUpLabel.alpha = 0.0
-        levelUpLabel.setScale(0.8)
+        levelUpLabel.setScale(0.75)
         hud.addChild(levelUpLabel)
 
-        let fadeIn = SKAction.fadeAlpha(to: 1.0, duration: 0.12)
-        let scaleUp = SKAction.scale(to: 1.18, duration: 0.18)
-        let wait = SKAction.wait(forDuration: 0.35)
-        let fadeOut = SKAction.fadeAlpha(to: 0.0, duration: 0.25)
+        let fadeIn = SKAction.fadeAlpha(to: 0.55, duration: 0.12)
+        let scaleUp = SKAction.scale(to: 1.08, duration: 0.18)
+        let wait = SKAction.wait(forDuration: 0.30)
+        let fadeOut = SKAction.fadeAlpha(to: 0.0, duration: 0.22)
         let remove = SKAction.removeFromParent()
 
         levelUpLabel.run(SKAction.sequence([
