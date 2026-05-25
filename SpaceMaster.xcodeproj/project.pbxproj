@@ -23,6 +23,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		5C5DCB4B2FC47036008D9155 /* SpaceMaster.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SpaceMaster.entitlements; sourceTree = "<group>"; };
 		85E240FA23D243530024ADD8 /* Explode.scnp */ = {isa = PBXFileReference; lastKnownFileType = file.scp; path = Explode.scnp; sourceTree = "<group>"; };
 		85E240FC23D244030024ADD8 /* star.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = star.png; sourceTree = "<group>"; };
 		85E2410423D35DAB0024ADD8 /* rolemusic_step_to_space.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = rolemusic_step_to_space.mp3; sourceTree = "<group>"; };
@@ -97,6 +98,7 @@
 		85ED332623BDE63800F95740 /* SpaceMaster */ = {
 			isa = PBXGroup;
 			children = (
+				5C5DCB4B2FC47036008D9155 /* SpaceMaster.entitlements */,
 				85E2410823D36B650024ADD8 /* font-title.ttf */,
 				85E2410323D35DA30024ADD8 /* Audio */,
 				85E240FE23D245000024ADD8 /* ParticleSystem */,
@@ -336,6 +338,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = SpaceMaster/SpaceMaster.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1.0.20200125;
 				DEVELOPMENT_TEAM = Y75832Z43J;
@@ -356,6 +359,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = SpaceMaster/SpaceMaster.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1.0.20200125;
 				DEVELOPMENT_TEAM = Y75832Z43J;
