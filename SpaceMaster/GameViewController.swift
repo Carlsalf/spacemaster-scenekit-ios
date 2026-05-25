@@ -21,7 +21,7 @@ public enum GameState {
     case gameOver
 }
 
-class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysicsContactDelegate {
+class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysicsContactDelegate, GKGameCenterControllerDelegate {
 
     var gameState: GameState = .title
     
@@ -37,6 +37,14 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var lastDisplayedLevel : Int = 1
     var bestScore: Int = UserDefaults.standard.integer(forKey: "BEST_SCORE")
     var gameCenterEnabled: Bool = false
+
+    // IDs temporales para Game Center. Deben coincidir con los creados en App Store Connect.
+    let gameCenterLeaderboardID = "spacemaster_highscore"
+    let achievementFirstHitID = "spacemaster_first_hit"
+    let achievement10HitsID = "spacemaster_10_hits"
+    let achievement25HitsID = "spacemaster_25_hits"
+    let achievement50HitsID = "spacemaster_50_hits"
+    let achievementLevel5ID = "spacemaster_level_5"
 
     var titleGroup : SCNNode?
     var gameOverGroup : SCNNode?
@@ -77,8 +85,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         let scene = SCNScene(named: "art.scnassets/ship.scn")!
         self.scene = scene
         
-        scene.background.contents = UIImage(named: "galaxy.png")
-        scene.lightingEnvironment.contents = UIImage(named: "galaxy.png")
+        scene.background.contents = UIColor.black
         scene.lightingEnvironment.intensity = 1.1
               
         self.cameraNode = scene.rootNode.childNode(withName: "camera", recursively: true)
@@ -144,26 +151,81 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         showTitle()
     }
     
+    // MARK: - Game Center
 
     func authenticateGameCenter() {
         GKLocalPlayer.local.authenticateHandler = { [weak self] viewController, error in
+            guard let self = self else { return }
+
             if let viewController = viewController {
-                self?.present(viewController, animated: true)
+                self.present(viewController, animated: true)
                 return
             }
 
             if GKLocalPlayer.local.isAuthenticated {
-                self?.gameCenterEnabled = true
+                self.gameCenterEnabled = true
                 print("✅ Game Center conectado")
             } else {
-                self?.gameCenterEnabled = false
+                self.gameCenterEnabled = false
                 print("❌ Game Center no autenticado")
-
                 if let error = error {
                     print("Game Center error: \(error.localizedDescription)")
                 }
             }
         }
+    }
+
+    func reportGameCenterResults(score: Int, level: Int) {
+        guard gameCenterEnabled, GKLocalPlayer.local.isAuthenticated else { return }
+
+        let scoreReporter = GKScore(leaderboardIdentifier: gameCenterLeaderboardID)
+        scoreReporter.value = Int64(bestScore)
+        GKScore.report([scoreReporter]) { error in
+            if let error = error {
+                print("Game Center leaderboard error: \(error.localizedDescription)")
+            } else {
+                print("✅ BEST score enviado a Game Center")
+            }
+        }
+
+        var achievements: [GKAchievement] = []
+
+        func unlock(_ identifier: String) {
+            let achievement = GKAchievement(identifier: identifier)
+            achievement.percentComplete = 100.0
+            achievement.showsCompletionBanner = true
+            achievements.append(achievement)
+        }
+
+        if score >= 1 { unlock(achievementFirstHitID) }
+        if score >= 10 { unlock(achievement10HitsID) }
+        if score >= 25 { unlock(achievement25HitsID) }
+        if score >= 50 { unlock(achievement50HitsID) }
+        if level >= 5 { unlock(achievementLevel5ID) }
+
+        guard achievements.isEmpty == false else { return }
+
+        GKAchievement.report(achievements) { error in
+            if let error = error {
+                print("Game Center achievements error: \(error.localizedDescription)")
+            } else {
+                print("✅ Logros enviados a Game Center")
+            }
+        }
+    }
+
+    func showGameCenterDashboard() {
+        guard GKLocalPlayer.local.isAuthenticated else { return }
+
+        let gameCenterVC = GKGameCenterViewController()
+        gameCenterVC.gameCenterDelegate = self
+        gameCenterVC.viewState = .leaderboards
+        gameCenterVC.leaderboardIdentifier = gameCenterLeaderboardID
+        present(gameCenterVC, animated: true)
+    }
+
+    func gameCenterViewControllerDidFinish(_ gameCenterViewController: GKGameCenterViewController) {
+        gameCenterViewController.dismiss(animated: true)
     }
 
     func setupAudioSession() {
@@ -241,17 +303,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func playSound(_ sound: SCNAudioSource?, at position: SCNVector3? = nil, duration: TimeInterval = 1.0) {
-        guard let sound = sound else { return }
+        guard let scene = self.scene, let sound = sound else { return }
 
-        // Reproduce el audio sin crear nodos temporales en la escena.
-        // Esto evita crashes tipo CFRetain/addChildNode cuando se destruyen
-        // varios asteroides en rápida sucesión durante el render/update loop.
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self,
-                  let rootNode = self.scene?.rootNode else { return }
-
-            rootNode.runAction(SCNAction.playAudio(sound, waitForCompletion: false))
-        }
+        // Reproducción no posicional y estable. Evita crear nodos temporales de audio
+        // durante impactos rápidos, que podía provocar crashes de SceneKit/CFRetain.
+        scene.rootNode.runAction(SCNAction.playAudio(sound, waitForCompletion: false))
     }
     
     func setupLights(inScene scene: SCNScene) {
@@ -399,88 +455,123 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         hud.scaleMode = .resizeFill
         hud.backgroundColor = .clear
 
-        // HUD final estable:
-        // HITS a la izquierda, BEST a la derecha y LVL centrado debajo.
-        // Tamaños compactos para evitar solapamiento en pantallas verticales.
-        let topY = view.bounds.height - 82
-        let levelY = view.bounds.height - 145
+        // HUD final estable: HITS izquierda, BEST derecha y LVL centrado debajo.
+        // Se mantiene compacto para evitar solapes con scores de 2 y 3 dígitos.
+        let safeTop = view.safeAreaInsets.top
+        let topY = view.bounds.height - max(86, safeTop + 60)
+        let levelY = topY - 66
+        let sideMargin: CGFloat = 34
 
         let scoreLabel = SKLabelNode(fontNamed: "University")
         scoreLabel.text = "0 HITS"
-        scoreLabel.fontSize = 32
+        scoreLabel.fontSize = 30
         scoreLabel.fontColor = UIColor.orange
         scoreLabel.horizontalAlignmentMode = .left
         scoreLabel.verticalAlignmentMode = .center
-        scoreLabel.position = CGPoint(x: 34, y: topY)
+        scoreLabel.position = CGPoint(x: sideMargin, y: topY)
         scoreLabel.zPosition = 100
+
         hud.addChild(scoreLabel)
         self.marcadorAsteroides = scoreLabel
 
         let bestLabel = SKLabelNode(fontNamed: "University")
         bestLabel.text = "BEST \(bestScore)"
-        bestLabel.fontSize = 32
+        bestLabel.fontSize = 30
         bestLabel.fontColor = UIColor.white
         bestLabel.horizontalAlignmentMode = .right
         bestLabel.verticalAlignmentMode = .center
-        bestLabel.position = CGPoint(x: view.bounds.width - 34, y: topY)
+        bestLabel.position = CGPoint(x: view.bounds.width - sideMargin, y: topY)
         bestLabel.zPosition = 100
+
         hud.addChild(bestLabel)
         self.marcadorBest = bestLabel
 
         let levelLabel = SKLabelNode(fontNamed: "University")
         levelLabel.text = "LVL 1"
         levelLabel.fontSize = 34
-        levelLabel.fontColor = UIColor.yellow
+        levelLabel.fontColor = UIColor(red: 0.95, green: 0.85, blue: 0.25, alpha: 1.0)
         levelLabel.horizontalAlignmentMode = .center
         levelLabel.verticalAlignmentMode = .center
         levelLabel.position = CGPoint(x: view.bounds.midX, y: levelY)
         levelLabel.zPosition = 100
+
         hud.addChild(levelLabel)
         self.marcadorLevel = levelLabel
 
-        // Flash rojo muy breve para feedback de daño/muerte.
         let damageOverlay = SKShapeNode(rectOf: hud.size)
-        damageOverlay.position = CGPoint(x: hud.size.width / 2.0, y: hud.size.height / 2.0)
-        damageOverlay.fillColor = UIColor.red
-        damageOverlay.strokeColor = UIColor.clear
+        damageOverlay.position = CGPoint(x: hud.size.width / 2, y: hud.size.height / 2)
+        damageOverlay.fillColor = UIColor(red: 1.0, green: 0.05, blue: 0.0, alpha: 1.0)
+        damageOverlay.strokeColor = .clear
         damageOverlay.alpha = 0.0
-        damageOverlay.zPosition = 500
+        damageOverlay.zPosition = 1000
         hud.addChild(damageOverlay)
         self.damageFlashOverlay = damageOverlay
 
         view.overlaySKScene = hud
         self.hud = hud
         self.hud?.isHidden = gameState != .playing
+        updateScoreHUD()
+    }
+
+    func currentLevel() -> Int {
+        return min(5, (numAsteroides / 10) + 1)
+    }
+
+    func currentAsteroidDuration() -> TimeInterval {
+        let level = Double(currentLevel())
+        let scoreFactor = Double(numAsteroides) * 0.035
+        return max(1.55, 5.0 - scoreFactor - ((level - 1.0) * 0.25))
+    }
+
+    func currentSpawnInterval() -> TimeInterval {
+        let level = Double(currentLevel())
+        return max(0.34, Double(spawnInterval) - ((level - 1.0) * 0.055))
     }
 
     func updateScoreHUD() {
-        let level = currentLevel()
-
         marcadorAsteroides?.text = "\(numAsteroides) HITS"
         marcadorBest?.text = "BEST \(bestScore)"
-        marcadorLevel?.text = "LVL \(level)"
+        marcadorLevel?.text = "LVL \(currentLevel())"
 
-        // Ajuste defensivo para mantener el HUD sin solapes con puntuaciones altas.
-        if numAsteroides >= 100 || bestScore >= 100 {
-            marcadorAsteroides?.fontSize = 27
-            marcadorBest?.fontSize = 27
-            marcadorLevel?.fontSize = 32
-        } else if numAsteroides >= 10 || bestScore >= 10 {
-            marcadorAsteroides?.fontSize = 32
-            marcadorBest?.fontSize = 32
-            marcadorLevel?.fontSize = 34
-        } else {
-            marcadorAsteroides?.fontSize = 34
-            marcadorBest?.fontSize = 34
-            marcadorLevel?.fontSize = 34
-        }
-
-        if level > lastDisplayedLevel && gameState == .playing {
-            lastDisplayedLevel = level
-            showLevelUp(level: level)
-        }
+        // Ajuste responsivo: evita que HITS invada BEST en pantalla vertical.
+        marcadorAsteroides?.fontSize = numAsteroides >= 100 ? 24 : (numAsteroides >= 10 ? 28 : 30)
+        marcadorBest?.fontSize = bestScore >= 100 ? 24 : 30
+        marcadorLevel?.fontSize = 34
     }
-    
+
+    func showLevelUpFeedback(level: Int) {
+        guard let hud = self.hud, gameState == .playing else { return }
+
+        let label = SKLabelNode(fontNamed: "University")
+        label.text = "LEVEL \(level)"
+        label.fontSize = 44
+        label.fontColor = UIColor(red: 1.0, green: 0.88, blue: 0.18, alpha: 1.0)
+        label.horizontalAlignmentMode = .center
+        label.verticalAlignmentMode = .center
+        label.position = CGPoint(x: hud.size.width / 2.0, y: hud.size.height * 0.58)
+        label.zPosition = 250
+        label.alpha = 0.0
+        label.setScale(0.75)
+
+        hud.addChild(label)
+
+        marcadorLevel?.removeAllActions()
+        marcadorLevel?.run(SKAction.sequence([
+            SKAction.scale(to: 1.16, duration: 0.12),
+            SKAction.scale(to: 1.0, duration: 0.16)
+        ]))
+
+        label.run(SKAction.sequence([
+            SKAction.group([
+                SKAction.fadeAlpha(to: 1.0, duration: 0.12),
+                SKAction.scale(to: 1.12, duration: 0.18)
+            ]),
+            SKAction.wait(forDuration: 0.42),
+            SKAction.fadeAlpha(to: 0.0, duration: 0.28),
+            SKAction.removeFromParent()
+        ]))
+    }
+
     func startTapRecognition(inView view: SCNView) {
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         view.addGestureRecognizer(tap)
@@ -502,6 +593,35 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         }
     }
     
+
+    func showDamageFlash() {
+        guard let overlay = damageFlashOverlay else { return }
+
+        overlay.removeAllActions()
+        overlay.alpha = 0.32
+
+        overlay.run(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.0, duration: 0.28)
+        ]))
+    }
+
+    func shakeCamera(intensity: CGFloat, duration: TimeInterval) {
+        guard let cameraNode = self.cameraNode else { return }
+
+        cameraNode.removeAction(forKey: "cameraShake")
+
+        let half = duration / 4.0
+        let moveLeft = SCNAction.moveBy(x: -intensity, y: 0, z: 0, duration: half)
+        let moveRight = SCNAction.moveBy(x: intensity * 2.0, y: 0, z: 0, duration: half)
+        let moveBack = SCNAction.moveBy(x: -intensity, y: 0, z: 0, duration: half)
+        let settle = SCNAction.wait(duration: half)
+
+        cameraNode.runAction(
+            SCNAction.sequence([moveLeft, moveRight, moveBack, settle]),
+            forKey: "cameraShake"
+        )
+    }
+
     func spawnAsteroid(pos: SCNVector3) {
         guard let scene = self.scene, let asteroidModel = self.asteroidModel else { return }
         
@@ -518,8 +638,18 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         scene.rootNode.addChildNode(asteroid)
         
-        let move = SCNAction.move(to: SCNVector3(pos.x, 0, 60), duration: 5.0)
-        let rotate = SCNAction.rotate(by: 10.0, around: randomAxis, duration: 5.0)
+        let dynamicDuration = currentAsteroidDuration()
+
+        let move = SCNAction.move(
+            to: SCNVector3(pos.x, 0, 60),
+            duration: dynamicDuration
+        )
+
+        let rotate = SCNAction.rotate(
+            by: 10.0,
+            around: randomAxis,
+            duration: dynamicDuration
+        )
         let group = SCNAction.group([move, rotate])
         let remove = SCNAction.removeFromParentNode()
         
@@ -566,6 +696,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         bullet.name = "destroyingBullet"
 
         let explosionPosition = asteroid.presentation.position
+        let previousLevel = currentLevel()
 
         asteroid.physicsBody = nil
         bullet.physicsBody = nil
@@ -584,6 +715,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
         }
         updateScoreHUD()
+
+        let newLevel = currentLevel()
+        if newLevel > previousLevel {
+            lastDisplayedLevel = newLevel
+            showLevelUpFeedback(level: newLevel)
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
             guard let self = self, self.gameState == .playing else { return }
@@ -607,6 +744,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         asteroid.removeFromParentNode()
 
         showExplosion(at: crashPosition, isShipExplosion: true)
+        showDamageFlash()
+        shakeCamera(intensity: 1.0, duration: 0.18)
         playSound(soundShipCrash, at: crashPosition, duration: 1.5)
 
         ship.removeAllActions()
@@ -631,69 +770,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             finish
         ]))
     }
-
-    func currentLevel() -> Int {
-        // Progresión simple y legible: cada 10 impactos sube un nivel.
-        // 0-9 = LVL 1, 10-19 = LVL 2, etc.
-        return max(1, (numAsteroides / 10) + 1)
-    }
-
-    func showLevelUp(level: Int) {
-        guard let hud = self.hud, gameState == .playing else { return }
-
-        let levelUpLabel = SKLabelNode(fontNamed: "University")
-        levelUpLabel.text = "LEVEL \(level)"
-        levelUpLabel.fontSize = 40
-        levelUpLabel.fontColor = UIColor.yellow
-        levelUpLabel.horizontalAlignmentMode = .center
-        levelUpLabel.verticalAlignmentMode = .center
-        levelUpLabel.position = CGPoint(x: hud.size.width / 2.0, y: hud.size.height * 0.55)
-        levelUpLabel.zPosition = 300
-        levelUpLabel.alpha = 0.0
-        levelUpLabel.setScale(0.75)
-        hud.addChild(levelUpLabel)
-
-        let fadeIn = SKAction.fadeAlpha(to: 0.55, duration: 0.12)
-        let scaleUp = SKAction.scale(to: 1.08, duration: 0.18)
-        let wait = SKAction.wait(forDuration: 0.30)
-        let fadeOut = SKAction.fadeAlpha(to: 0.0, duration: 0.22)
-        let remove = SKAction.removeFromParent()
-
-        levelUpLabel.run(SKAction.sequence([
-            SKAction.group([fadeIn, scaleUp]),
-            wait,
-            fadeOut,
-            remove
-        ]))
-    }
-
-    func showDamageFlash() {
-        guard let overlay = self.damageFlashOverlay else { return }
-
-        overlay.removeAllActions()
-        overlay.alpha = 0.32
-
-        let fadeOut = SKAction.fadeAlpha(to: 0.0, duration: 0.28)
-        overlay.run(SKAction.sequence([fadeOut]))
-    }
-
-    func shakeCamera(intensity: CGFloat, duration: TimeInterval) {
-        guard let cameraNode = self.cameraNode else { return }
-
-        let half = duration / 4.0
-        let moveLeft = SCNAction.moveBy(x: -intensity, y: 0, z: 0, duration: half)
-        let moveRight = SCNAction.moveBy(x: intensity * 2.0, y: 0, z: 0, duration: half)
-        let moveBack = SCNAction.moveBy(x: -intensity, y: 0, z: 0, duration: half)
-        let settle = SCNAction.wait(duration: half)
-
-        cameraNode.runAction(SCNAction.sequence([
-            moveLeft,
-            moveRight,
-            moveBack,
-            settle
-        ]))
-    }
-
     func showExplosion(onNode node: SCNNode) {
         showExplosion(at: node.presentation.position, isShipExplosion: node.name == "ship")
     }
@@ -706,20 +782,27 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         explosionGroup.position = position
         scene.rootNode.addChildNode(explosionGroup)
 
-        let sparkCount = isShipExplosion ? 34 : 18
-        let sparkRadius: CGFloat = isShipExplosion ? 0.10 : 0.055
-        let spread: Float = isShipExplosion ? 5.8 : 2.8
-        let duration: TimeInterval = isShipExplosion ? 0.75 : 0.42
+        // Explosión estable sin SCNParticleSystem para evitar el crash CFRetain.
+        // Se usan nodos independientes: más impacto visual, sin esfera amarilla sólida.
+        let sparkCount = isShipExplosion ? 52 : 42
+        let sparkRadiusRange: ClosedRange<CGFloat> = isShipExplosion ? 0.075...0.145 : 0.050...0.100
+        let spread: Float = isShipExplosion ? 7.0 : 4.8
+        let duration: TimeInterval = isShipExplosion ? 0.90 : 0.66
+
+        let colors: [UIColor] = [
+            UIColor(red: 1.0, green: 0.90, blue: 0.18, alpha: 1.0),
+            UIColor(red: 1.0, green: 0.55, blue: 0.06, alpha: 1.0),
+            UIColor(red: 1.0, green: 0.25, blue: 0.02, alpha: 1.0),
+            UIColor(red: 1.0, green: 0.98, blue: 0.65, alpha: 1.0)
+        ]
 
         for index in 0..<sparkCount {
-            let sparkGeometry = SCNSphere(radius: sparkRadius)
+            let sparkGeometry = SCNSphere(radius: CGFloat.random(in: sparkRadiusRange))
             sparkGeometry.segmentCount = 6
 
             let material = SCNMaterial()
-            material.diffuse.contents = index % 3 == 0
-                ? UIColor(red: 1.0, green: 0.75, blue: 0.12, alpha: 1.0)
-                : UIColor(red: 1.0, green: 0.35, blue: 0.03, alpha: 1.0)
-            material.emission.contents = material.diffuse.contents
+            material.diffuse.contents = colors[index % colors.count]
+            material.emission.contents = colors[index % colors.count]
             material.lightingModel = .constant
             sparkGeometry.materials = [material]
 
@@ -729,17 +812,22 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             explosionGroup.addChildNode(sparkNode)
 
             let angle = Float.random(in: 0...(Float.pi * 2.0))
-            let vertical = Float.random(in: -0.7...0.7)
-            let distance = Float.random(in: spread * 0.35...spread)
+            let vertical = Float.random(in: -1.0...1.0)
+            let distance = Float.random(in: spread * 0.20...spread)
 
             let dx = cos(angle) * distance
-            let dy = vertical * distance * 0.35
+            let dy = vertical * distance * 0.38
             let dz = sin(angle) * distance
 
-            let move = SCNAction.moveBy(x: CGFloat(dx), y: CGFloat(dy), z: CGFloat(dz), duration: duration)
+            let move = SCNAction.moveBy(
+                x: CGFloat(dx),
+                y: CGFloat(dy),
+                z: CGFloat(dz),
+                duration: duration
+            )
             move.timingMode = .easeOut
 
-            let scale = SCNAction.scale(to: 0.05, duration: duration)
+            let scale = SCNAction.scale(to: 0.01, duration: duration)
             let fade = SCNAction.fadeOpacity(to: 0.0, duration: duration)
             let remove = SCNAction.removeFromParentNode()
 
@@ -749,43 +837,72 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             ]))
         }
 
-        // Humo suave con geometría simple, sin SCNParticleSystem para evitar el crash CFRetain.
-        if isShipExplosion {
-            for _ in 0..<6 {
-                let smokeGeometry = SCNSphere(radius: CGFloat.random(in: 0.10...0.18))
-                smokeGeometry.segmentCount = 8
+        // Micro-destello: puntos breves y pequeños para dar fuerza sin volver al bloque amarillo.
+        let flashCount = isShipExplosion ? 10 : 7
+        for _ in 0..<flashCount {
+            let flashGeometry = SCNSphere(radius: isShipExplosion ? 0.12 : 0.085)
+            flashGeometry.segmentCount = 6
 
-                let smokeMaterial = SCNMaterial()
-                smokeMaterial.diffuse.contents = UIColor(white: 0.35, alpha: 0.18)
-                smokeMaterial.emission.contents = UIColor(white: 0.15, alpha: 0.10)
-                smokeMaterial.lightingModel = .constant
-                smokeGeometry.materials = [smokeMaterial]
+            let flashMaterial = SCNMaterial()
+            flashMaterial.diffuse.contents = UIColor(red: 1.0, green: 0.88, blue: 0.12, alpha: 0.9)
+            flashMaterial.emission.contents = UIColor(red: 1.0, green: 0.70, blue: 0.04, alpha: 1.0)
+            flashMaterial.lightingModel = .constant
+            flashGeometry.materials = [flashMaterial]
 
-                let smokeNode = SCNNode(geometry: smokeGeometry)
-                smokeNode.name = "explosionSmoke"
-                smokeNode.opacity = 0.35
-                smokeNode.position = SCNVector3Zero
-                explosionGroup.addChildNode(smokeNode)
+            let flashNode = SCNNode(geometry: flashGeometry)
+            flashNode.name = "explosionFlash"
+            flashNode.position = SCNVector3(
+                Float.random(in: -0.35...0.35),
+                Float.random(in: -0.14...0.14),
+                Float.random(in: -0.35...0.35)
+            )
+            explosionGroup.addChildNode(flashNode)
 
-                let dx = CGFloat.random(in: -1.0...1.0)
-                let dy = CGFloat.random(in: -0.3...0.3)
-                let dz = CGFloat.random(in: -1.0...1.0)
+            flashNode.runAction(.sequence([
+                .group([
+                    .scale(to: isShipExplosion ? 1.65 : 1.18, duration: 0.07),
+                    .fadeOpacity(to: 0.0, duration: 0.13)
+                ]),
+                .removeFromParentNode()
+            ]))
+        }
 
-                smokeNode.runAction(.sequence([
-                    .group([
-                        .moveBy(x: dx, y: dy, z: dz, duration: 0.85),
-                        .scale(to: 2.2, duration: 0.85),
-                        .fadeOpacity(to: 0.0, duration: 0.85)
-                    ]),
-                    .removeFromParentNode()
-                ]))
-            }
+        // Humo suave: un poco más visible, pero sin tapar la escena.
+        let smokeCount = isShipExplosion ? 8 : 4
+        for _ in 0..<smokeCount {
+            let smokeGeometry = SCNSphere(radius: CGFloat.random(in: isShipExplosion ? 0.10...0.18 : 0.065...0.115))
+            smokeGeometry.segmentCount = 8
+
+            let smokeMaterial = SCNMaterial()
+            smokeMaterial.diffuse.contents = UIColor(white: 0.34, alpha: 0.18)
+            smokeMaterial.emission.contents = UIColor(white: 0.13, alpha: 0.08)
+            smokeMaterial.lightingModel = .constant
+            smokeGeometry.materials = [smokeMaterial]
+
+            let smokeNode = SCNNode(geometry: smokeGeometry)
+            smokeNode.name = "explosionSmoke"
+            smokeNode.opacity = isShipExplosion ? 0.36 : 0.24
+            smokeNode.position = SCNVector3Zero
+            explosionGroup.addChildNode(smokeNode)
+
+            let dx = CGFloat.random(in: -1.05...1.05)
+            let dy = CGFloat.random(in: -0.30...0.30)
+            let dz = CGFloat.random(in: -1.05...1.05)
+
+            smokeNode.runAction(.sequence([
+                .group([
+                    .moveBy(x: dx, y: dy, z: dz, duration: isShipExplosion ? 0.90 : 0.62),
+                    .scale(to: isShipExplosion ? 2.1 : 1.45, duration: isShipExplosion ? 0.90 : 0.62),
+                    .fadeOpacity(to: 0.0, duration: isShipExplosion ? 0.90 : 0.62)
+                ]),
+                .removeFromParentNode()
+            ]))
         }
 
         let light = SCNLight()
         light.type = .omni
         light.color = UIColor.orange
-        light.intensity = isShipExplosion ? 900 : 220
+        light.intensity = isShipExplosion ? 1300 : 560
 
         let lightNode = SCNNode()
         lightNode.name = "explosionLight"
@@ -794,7 +911,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         scene.rootNode.addChildNode(lightNode)
 
         let initialIntensity = light.intensity
-        let lightDuration: TimeInterval = isShipExplosion ? 0.22 : 0.12
+        let lightDuration: TimeInterval = isShipExplosion ? 0.26 : 0.20
         let fadeLight = SCNAction.customAction(duration: lightDuration) { node, elapsedTime in
             let progress = CGFloat(elapsedTime / lightDuration)
             node.light?.intensity = initialIntensity * max(0.0, 1.0 - progress)
@@ -806,7 +923,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         ]))
 
         explosionGroup.runAction(.sequence([
-            .wait(duration: isShipExplosion ? 1.0 : 0.55),
+            .wait(duration: isShipExplosion ? 1.10 : 0.76),
             .removeFromParentNode()
         ]))
     }
@@ -896,7 +1013,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         shipDestroyed = false
         collisionProcessing = false
         previousUpdateTime = nil
-        timeToSpawn = TimeInterval(spawnInterval)
+        timeToSpawn = currentSpawnInterval()
         
         clearGameNodes()
         
@@ -914,13 +1031,13 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     
     func showGameOver() {
         guard gameState == .playing || gameState == .introduction else { return }
-
+        
         gameState = .gameOver
         stopBackgroundMusic()
-
+        
         hud?.isHidden = true
         gameOverGroup?.isHidden = false
-
+        
         let finalLevel = currentLevel()
         let newRecord = numAsteroides >= bestScore && numAsteroides > 0
         var resultText = "SCORE: \(numAsteroides)\nBEST: \(bestScore)\nLEVEL: \(finalLevel)"
@@ -932,17 +1049,19 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             centerPivot(of: resultsNode)
         }
 
+        reportGameCenterResults(score: numAsteroides, level: finalLevel)
+        
         clearGameNodes(keepExplosions: true)
-
+        
         gameOverGroup?.position = SCNVector3(0, 0, 0)
         gameOverGroup?.opacity = 1.0
         gameOverGroup?.removeAllActions()
-
+        
         let wait = SCNAction.wait(duration: 0.15)
         let pulseUp = SCNAction.scale(to: 1.05, duration: 0.25)
         let pulseDown = SCNAction.scale(to: 1.0, duration: 0.25)
         let pulse = SCNAction.repeatForever(.sequence([pulseUp, pulseDown]))
-
+        
         gameOverGroup?.runAction(.sequence([wait, pulse]))
     }
     
