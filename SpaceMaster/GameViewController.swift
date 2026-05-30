@@ -18,6 +18,9 @@ public enum GameState {
     case title
     case introduction
     case playing
+    case paused
+    case credits
+    case highScores
     case gameOver
 }
 
@@ -44,14 +47,23 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     let achievement10HitsID = "spacemaster_10_hits"
     let achievement25HitsID = "spacemaster_25_hits"
     let achievement50HitsID = "spacemaster_50_hits"
+    let achievement100HitsID = "spacemaster_100_hits"
+    let achievementLevel3ID = "spacemaster_level_3"
     let achievementLevel5ID = "spacemaster_level_5"
-    let achievementSurvivorID = "spacemaster_survivor"
     let achievementNewRecordID = "spacemaster_new_record"
+    let achievementSurvivorID = "spacemaster_survivor"
     let achievementMasterPilotID = "spacemaster_master_pilot"
 
     var titleGroup : SCNNode?
+    var creditsGroup : SCNNode?
+    var highScoresGroup : SCNNode?
     var gameOverGroup : SCNNode?
     var gameOverResultsText : SCNText?
+    var pauseButtonLabel : SKLabelNode?
+    var pauseOverlayLabel : SKLabelNode?
+    var pauseOverlayBackground : SKShapeNode?
+    var lastScore: Int = UserDefaults.standard.integer(forKey: "LAST_SCORE")
+    var maxLevelReached: Int = UserDefaults.standard.integer(forKey: "MAX_LEVEL_REACHED")
     
     var cameraNode : SCNNode?
     var cameraEulerAngle : SCNVector3?
@@ -138,6 +150,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         setupView(scnView, withScene: scene)
         startTapRecognition(inView: scnView)
         startMotionUpdates()
+        setupAppLifecycleObservers()
 
         scene.physicsWorld.contactDelegate = self
         
@@ -154,6 +167,35 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         showTitle()
     }
     
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    func setupAppLifecycleObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppWillResignActive),
+            name: UIApplication.willResignActiveNotification,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+    }
+
+    @objc func handleAppWillResignActive() {
+        pauseGame(showOverlay: true)
+    }
+
+    @objc func handleAppDidEnterBackground() {
+        pauseGame(showOverlay: true)
+    }
+
     // MARK: - Game Center
 
     func authenticateGameCenter() {
@@ -204,7 +246,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         if score >= 10 { unlock(achievement10HitsID) }
         if score >= 25 { unlock(achievement25HitsID) }
         if score >= 50 { unlock(achievement50HitsID) }
+        if score >= 100 { unlock(achievement100HitsID) }
+        if level >= 3 { unlock(achievementLevel3ID) }
         if level >= 5 { unlock(achievementLevel5ID) }
+        if score > 0 && score >= bestScore { unlock(achievementNewRecordID) }
+        if score >= 75 { unlock(achievementSurvivorID) }
+        if score >= 120 { unlock(achievementMasterPilotID) }
 
         guard achievements.isEmpty == false else { return }
 
@@ -364,9 +411,119 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         tapNode.scale = SCNVector3(0.42, 0.42, 0.42)
         titleGroup.addChildNode(tapNode)
         
+        let playText = SCNText(string: "PLAY", extrusionDepth: 0.7)
+        playText.font = UIFont(name: "University", size: 5.2) ?? UIFont.systemFont(ofSize: 5.2, weight: .bold)
+        playText.flatness = 0.2
+        playText.firstMaterial?.diffuse.contents = UIColor.orange
+
+        let playNode = SCNNode(geometry: playText)
+        playNode.name = "menuPlay"
+        centerPivot(of: playNode)
+        playNode.position = SCNVector3(0, -4.2, -20)
+        playNode.scale = SCNVector3(0.42, 0.42, 0.42)
+        titleGroup.addChildNode(playNode)
+
+        let highScoreText = SCNText(string: "HI-SCORES", extrusionDepth: 0.7)
+        highScoreText.font = UIFont(name: "University", size: 4.1) ?? UIFont.systemFont(ofSize: 4.1, weight: .bold)
+        highScoreText.flatness = 0.2
+        highScoreText.firstMaterial?.diffuse.contents = UIColor.white
+
+        let highScoreNode = SCNNode(geometry: highScoreText)
+        highScoreNode.name = "menuHighScores"
+        centerPivot(of: highScoreNode)
+        highScoreNode.position = SCNVector3(0, -8.3, -20)
+        highScoreNode.scale = SCNVector3(0.36, 0.36, 0.36)
+        titleGroup.addChildNode(highScoreNode)
+
+        let leaderboardText = SCNText(string: "LEADERBOARD", extrusionDepth: 0.7)
+        leaderboardText.font = UIFont(name: "University", size: 3.6) ?? UIFont.systemFont(ofSize: 3.6, weight: .bold)
+        leaderboardText.flatness = 0.2
+        leaderboardText.firstMaterial?.diffuse.contents = UIColor.white
+
+        let leaderboardNode = SCNNode(geometry: leaderboardText)
+        leaderboardNode.name = "menuLeaderboard"
+        centerPivot(of: leaderboardNode)
+        leaderboardNode.position = SCNVector3(0, -12.2, -20)
+        leaderboardNode.scale = SCNVector3(0.32, 0.32, 0.32)
+        titleGroup.addChildNode(leaderboardNode)
+
+        let creditsMenuText = SCNText(string: "CREDITS", extrusionDepth: 0.7)
+        creditsMenuText.font = UIFont(name: "University", size: 4.0) ?? UIFont.systemFont(ofSize: 4.0, weight: .bold)
+        creditsMenuText.flatness = 0.2
+        creditsMenuText.firstMaterial?.diffuse.contents = UIColor.white
+
+        let creditsMenuNode = SCNNode(geometry: creditsMenuText)
+        creditsMenuNode.name = "menuCredits"
+        centerPivot(of: creditsMenuNode)
+        creditsMenuNode.position = SCNVector3(0, -16.0, -20)
+        creditsMenuNode.scale = SCNVector3(0.33, 0.33, 0.33)
+        titleGroup.addChildNode(creditsMenuNode)
+
         scene.rootNode.addChildNode(titleGroup)
         self.titleGroup = titleGroup
-        
+
+        let creditsGroup = SCNNode()
+        creditsGroup.name = "creditsGroup"
+        creditsGroup.isHidden = true
+
+        let creditsText = SCNText(
+            string: "CREDITS\n\nDEVELOPED BY\nCARLOS CALLAGUA\n\nRESOURCES\nCHOCOLATE SHIP\nLOW POLY ROCKS\nSPACE AUDIO FX\nUNIVERSITY FONT\n\nTAP TO MENU",
+            extrusionDepth: 0.7
+        )
+        creditsText.font = UIFont(name: "University", size: 4) ?? UIFont.systemFont(ofSize: 4, weight: .bold)
+        creditsText.flatness = 0.2
+        creditsText.firstMaterial?.diffuse.contents = UIColor.white
+
+        let creditsNode = SCNNode(geometry: creditsText)
+        centerPivot(of: creditsNode)
+        creditsNode.position = SCNVector3(0, 4, -24)
+        creditsNode.scale = SCNVector3(0.24, 0.24, 0.24)
+        creditsGroup.addChildNode(creditsNode)
+
+        scene.rootNode.addChildNode(creditsGroup)
+        self.creditsGroup = creditsGroup
+
+        let highScoresGroup = SCNNode()
+        highScoresGroup.name = "highScoresGroup"
+        highScoresGroup.isHidden = true
+
+        let highScoresText = SCNText(string: "HI-SCORES", extrusionDepth: 0.7)
+        highScoresText.font = UIFont(name: "University", size: 6) ?? UIFont.systemFont(ofSize: 6, weight: .bold)
+        highScoresText.flatness = 0.2
+        highScoresText.firstMaterial?.diffuse.contents = UIColor.orange
+
+        let highScoresNode = SCNNode(geometry: highScoresText)
+        centerPivot(of: highScoresNode)
+        highScoresNode.position = SCNVector3(0, 9, -26)
+        highScoresNode.scale = SCNVector3(0.34, 0.34, 0.34)
+        highScoresGroup.addChildNode(highScoresNode)
+
+        let highScoresInfo = SCNText(string: "", extrusionDepth: 0.7)
+        highScoresInfo.font = UIFont(name: "University", size: 4) ?? UIFont.systemFont(ofSize: 4, weight: .bold)
+        highScoresInfo.flatness = 0.2
+        highScoresInfo.firstMaterial?.diffuse.contents = UIColor.white
+
+        let highScoresInfoNode = SCNNode(geometry: highScoresInfo)
+        highScoresInfoNode.name = "highScoresInfoNode"
+        centerPivot(of: highScoresInfoNode)
+        highScoresInfoNode.position = SCNVector3(0, 1, -22)
+        highScoresInfoNode.scale = SCNVector3(0.28, 0.28, 0.28)
+        highScoresGroup.addChildNode(highScoresInfoNode)
+
+        let highScoresBack = SCNText(string: "TAP TO MENU", extrusionDepth: 0.7)
+        highScoresBack.font = UIFont(name: "University", size: 3.2) ?? UIFont.systemFont(ofSize: 3.2, weight: .bold)
+        highScoresBack.flatness = 0.2
+        highScoresBack.firstMaterial?.diffuse.contents = UIColor.orange
+
+        let highScoresBackNode = SCNNode(geometry: highScoresBack)
+        centerPivot(of: highScoresBackNode)
+        highScoresBackNode.position = SCNVector3(0, -8, -20)
+        highScoresBackNode.scale = SCNVector3(0.26, 0.26, 0.26)
+        highScoresGroup.addChildNode(highScoresBackNode)
+
+        scene.rootNode.addChildNode(highScoresGroup)
+        self.highScoresGroup = highScoresGroup
+
         let gameOverGroup = SCNNode()
         gameOverGroup.name = "gameOverGroup"
         gameOverGroup.isHidden = true
@@ -510,6 +667,43 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         hud.addChild(damageOverlay)
         self.damageFlashOverlay = damageOverlay
 
+        // Botón de pausa separado del marcador principal para no sobrecargar el HUD.
+        // Se sitúa abajo a la izquierda, fuera de HITS/BEST/LVL.
+        let safeBottom = view.safeAreaInsets.bottom
+        let pauseLabel = SKLabelNode(fontNamed: "University")
+        pauseLabel.text = "PAUSE"
+        pauseLabel.fontSize = 18
+        pauseLabel.fontColor = UIColor.white
+        pauseLabel.horizontalAlignmentMode = .left
+        pauseLabel.verticalAlignmentMode = .center
+        pauseLabel.position = CGPoint(x: sideMargin, y: max(62, safeBottom + 48))
+        pauseLabel.zPosition = 1250
+        hud.addChild(pauseLabel)
+        self.pauseButtonLabel = pauseLabel
+
+        let pauseBackground = SKShapeNode(rectOf: hud.size)
+        pauseBackground.position = CGPoint(x: hud.size.width / 2, y: hud.size.height / 2)
+        pauseBackground.fillColor = UIColor.black
+        pauseBackground.strokeColor = .clear
+        pauseBackground.alpha = 0.56
+        pauseBackground.zPosition = 1100
+        pauseBackground.isHidden = true
+        hud.addChild(pauseBackground)
+        self.pauseOverlayBackground = pauseBackground
+
+        let pausedLabel = SKLabelNode(fontNamed: "University")
+        pausedLabel.text = "PAUSED\nTAP TO RESUME"
+        pausedLabel.numberOfLines = 2
+        pausedLabel.fontSize = 29
+        pausedLabel.fontColor = UIColor.orange
+        pausedLabel.horizontalAlignmentMode = .center
+        pausedLabel.verticalAlignmentMode = .center
+        pausedLabel.position = CGPoint(x: hud.size.width / 2, y: hud.size.height * 0.53)
+        pausedLabel.zPosition = 1200
+        pausedLabel.isHidden = true
+        hud.addChild(pausedLabel)
+        self.pauseOverlayLabel = pausedLabel
+
         view.overlaySKScene = hud
         self.hud = hud
         self.hud?.isHidden = gameState != .playing
@@ -570,7 +764,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
                 SKAction.scale(to: 1.12, duration: 0.18)
             ]),
             SKAction.wait(forDuration: 0.42),
-            SKAction.fadeAlpha(to: 0.0, duration: 0.28),
+            SKAction.fadeAlpha(to: 0.0, duration: 0.18),
             SKAction.removeFromParent()
         ]))
     }
@@ -601,10 +795,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         guard let overlay = damageFlashOverlay else { return }
 
         overlay.removeAllActions()
-        overlay.alpha = 0.32
+        overlay.alpha = 0.22
 
         overlay.run(SKAction.sequence([
-            SKAction.fadeAlpha(to: 0.0, duration: 0.28)
+            SKAction.fadeAlpha(to: 0.0, duration: 0.18)
         ]))
     }
 
@@ -772,6 +966,17 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             waitExplosion,
             finish
         ]))
+
+
+        // Respaldo independiente de SCNAction: si la escena se pausa o una acción queda interrumpida,
+        // la pantalla final se muestra igualmente. Esto corrige el caso observado de nave destruida
+        // sin transición a Game Over.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.55) { [weak self] in
+            guard let self = self else { return }
+            if self.shipDestroyed && self.gameState != .gameOver {
+                self.showGameOver()
+            }
+        }
     }
     func showExplosion(onNode node: SCNNode) {
         showExplosion(at: node.presentation.position, isShipExplosion: node.name == "ship")
@@ -1020,9 +1225,18 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         
         clearGameNodes()
         
+        scene?.rootNode.isPaused = false
+
         titleGroup?.isHidden = false
+        creditsGroup?.isHidden = true
+        highScoresGroup?.isHidden = true
         gameOverGroup?.isHidden = true
         hud?.isHidden = true
+        pauseOverlayLabel?.isHidden = true
+        pauseOverlayBackground?.isHidden = true
+        damageFlashOverlay?.removeAllActions()
+        damageFlashOverlay?.alpha = 0.0
+        pauseButtonLabel?.text = "PAUSE"
         
         ship?.removeAllActions()
         ship?.isHidden = true
@@ -1033,17 +1247,35 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func showGameOver() {
-        guard gameState == .playing || gameState == .introduction else { return }
-        
-        gameState = .gameOver
-        stopBackgroundMusic()
-        
-        hud?.isHidden = true
-        gameOverGroup?.isHidden = false
-        
+        // Debe ejecutarse siempre tras la destrucción de la nave, aunque haya acciones pausadas
+        // o el juego haya entrado en un estado intermedio. Esto evita quedarse sin pantalla final.
+        guard gameState != .gameOver else { return }
+
         let finalLevel = currentLevel()
-        let newRecord = numAsteroides >= bestScore && numAsteroides > 0
-        var resultText = "SCORE: \(numAsteroides)\nBEST: \(bestScore)\nLEVEL: \(finalLevel)"
+        let finalScore = numAsteroides
+        let newRecord = finalScore >= bestScore && finalScore > 0
+
+        gameState = .gameOver
+        scene?.rootNode.isPaused = false
+        stopBackgroundMusic()
+
+        lastScore = finalScore
+        maxLevelReached = max(maxLevelReached, finalLevel)
+        UserDefaults.standard.set(lastScore, forKey: "LAST_SCORE")
+        UserDefaults.standard.set(maxLevelReached, forKey: "MAX_LEVEL_REACHED")
+
+        pauseOverlayLabel?.isHidden = true
+        pauseOverlayBackground?.isHidden = true
+        damageFlashOverlay?.removeAllActions()
+        damageFlashOverlay?.alpha = 0.0
+        pauseButtonLabel?.text = "PAUSE"
+        hud?.isHidden = true
+        titleGroup?.isHidden = true
+        creditsGroup?.isHidden = true
+        highScoresGroup?.isHidden = true
+        gameOverGroup?.isHidden = false
+
+        var resultText = "SCORE: \(finalScore)\nBEST: \(bestScore)\nLEVEL: \(finalLevel)"
         if newRecord {
             resultText += "\nNEW RECORD!"
         }
@@ -1052,22 +1284,23 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             centerPivot(of: resultsNode)
         }
 
-        reportGameCenterResults(score: numAsteroides, level: finalLevel)
-        
+        reportGameCenterResults(score: finalScore, level: finalLevel)
+
         clearGameNodes(keepExplosions: true)
-        
+
         gameOverGroup?.position = SCNVector3(0, 0, 0)
+        gameOverGroup?.scale = SCNVector3(1, 1, 1)
         gameOverGroup?.opacity = 1.0
         gameOverGroup?.removeAllActions()
-        
+
         let wait = SCNAction.wait(duration: 0.15)
         let pulseUp = SCNAction.scale(to: 1.05, duration: 0.25)
         let pulseDown = SCNAction.scale(to: 1.0, duration: 0.25)
         let pulse = SCNAction.repeatForever(.sequence([pulseUp, pulseDown]))
-        
+
         gameOverGroup?.runAction(.sequence([wait, pulse]))
     }
-    
+
     func startGame() {
         gameState = .introduction
         shipDestroyed = false
@@ -1088,6 +1321,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         updateScoreHUD()
         
         ship?.removeAllActions()
+        ship?.opacity = 1.0
         ship?.position = SCNVector3(0, 0, 45)
         ship?.eulerAngles = SCNVector3Zero
         
@@ -1110,20 +1344,25 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         }
         previousUpdateTime = time
         
-        guard gameState == .playing, let ship = self.ship else { return }
+        guard gameState == .playing, shipDestroyed == false, let ship = self.ship else { return }
         
         timeToSpawn -= deltaTime
         if timeToSpawn <= 0 {
-            let randomX = Float.getRandom(from: Float(limits.minX), to: Float(limits.minX + limits.width))
+            let asteroidMargin: Float = 7.0
+            let randomX = Float.getRandom(
+                from: Float(limits.minX) + asteroidMargin,
+                to: Float(limits.minX + limits.width) - asteroidMargin
+            )
             let spawnPos = SCNVector3(randomX, 0, -120)
             spawnAsteroid(pos: spawnPos)
-            timeToSpawn = TimeInterval(spawnInterval)
+            timeToSpawn = currentSpawnInterval()
         }
 
         let nextX = ship.position.x + velocity * 120.0 * Float(deltaTime)
-        let minX = Float(limits.minX)
-        let maxX = Float(limits.minX + limits.width)
-        
+        let shipScreenMargin: Float = 10.0
+        let minX = Float(limits.minX) + shipScreenMargin
+        let maxX = Float(limits.minX + limits.width) - shipScreenMargin
+
         ship.position.x = max(minX, min(maxX, nextX))
         ship.eulerAngles = SCNVector3(0, 0, -velocity * 0.75)
         
@@ -1135,24 +1374,115 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         // Se deja vacío para evitar dobles eventos sobre los mismos nodos.
     }
     
+
+    func showHighScores() {
+        gameState = .highScores
+        clearGameNodes()
+        hud?.isHidden = true
+        titleGroup?.isHidden = true
+        creditsGroup?.isHidden = true
+        gameOverGroup?.isHidden = true
+        highScoresGroup?.isHidden = false
+        ship?.isHidden = true
+
+        if let infoNode = highScoresGroup?.childNode(withName: "highScoresInfoNode", recursively: true),
+           let infoText = infoNode.geometry as? SCNText {
+            infoText.string = "BEST: \(bestScore)\nLAST: \(lastScore)\nMAX LEVEL: \(maxLevelReached)"
+            centerPivot(of: infoNode)
+        }
+    }
+
+    func showCredits() {
+        gameState = .credits
+        clearGameNodes()
+        hud?.isHidden = true
+        titleGroup?.isHidden = true
+        highScoresGroup?.isHidden = true
+        gameOverGroup?.isHidden = true
+        creditsGroup?.isHidden = false
+        ship?.isHidden = true
+    }
+
+    func pauseGame(showOverlay: Bool) {
+        guard gameState == .playing else { return }
+
+        gameState = .paused
+        scene?.rootNode.isPaused = true
+        pauseButtonLabel?.text = "RESUME"
+        pauseButtonLabel?.fontColor = UIColor.orange
+        pauseOverlayBackground?.isHidden = showOverlay == false
+        pauseOverlayLabel?.isHidden = showOverlay == false
+        backgroundMusicPlayer?.pause()
+    }
+
+    func resumeGame() {
+        guard gameState == .paused else { return }
+
+        scene?.rootNode.isPaused = false
+        pauseOverlayBackground?.isHidden = true
+        pauseOverlayLabel?.isHidden = true
+        pauseButtonLabel?.text = "PAUSE"
+        pauseButtonLabel?.fontColor = UIColor.white
+        // No se reinicia la música de introducción al reanudar una partida.
+        // El gameplay se mantiene sin música de menú para evitar mezcla de audio.
+        previousUpdateTime = nil
+        gameState = .playing
+    }
+
+    func isPauseButtonTap(_ location: CGPoint, in view: UIView) -> Bool {
+        // UIKit mide desde arriba; el botón está abajo a la izquierda en el overlay SpriteKit.
+        let bottomTapArea = max(96, view.safeAreaInsets.bottom + 92)
+        return location.x <= 150 && location.y >= view.bounds.height - bottomTapArea
+    }
+
+    func handleTitleMenuTap(_ location: CGPoint, in view: UIView) {
+        let relativeY = location.y / max(view.bounds.height, 1.0)
+
+        if relativeY > 0.70 {
+            showCredits()
+        } else if relativeY > 0.60 {
+            showGameCenterDashboard()
+        } else if relativeY > 0.50 {
+            showHighScores()
+        } else {
+            startGame()
+        }
+    }
+
     @objc
     func handleTap(_ gestureRecognize: UIGestureRecognizer) {
+        let location = gestureRecognize.location(in: self.view)
+
         if gameState == .playing {
-            shot()
+            if isPauseButtonTap(location, in: self.view) {
+                pauseGame(showOverlay: true)
+            } else {
+                shot()
+            }
             return
         }
-        
+
+        if gameState == .paused {
+            resumeGame()
+            return
+        }
+
         if gameState == .title {
-            startGame()
+            handleTitleMenuTap(location, in: self.view)
             return
         }
-        
+
+        if gameState == .credits || gameState == .highScores {
+            showTitle()
+            return
+        }
+
         if gameState == .gameOver {
             startGame()
             return
         }
     }
-    
+
     override var shouldAutorotate: Bool {
         return true
     }
