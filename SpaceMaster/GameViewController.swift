@@ -80,6 +80,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var soundExplosion : SCNAudioSource?
     var soundShipCrash : SCNAudioSource?
     var soundShot : SCNAudioSource?
+    var soundButton : SCNAudioSource?
 
     var numAsteroides : Int = 0
     var velocity : Float = 0.0
@@ -331,6 +332,17 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             self.soundShot = shotSound
         } else {
             print("Error: shot sound file not found")
+        }
+
+        // Sonido corto para botones de menú, pausa, resume y restart.
+        // Se usa un fallback seguro con bomb.wav para no romper el proyecto si aún no existe button_click.wav.
+        if let buttonSound = SCNAudioSource(fileNamed: "button_click.wav") ?? SCNAudioSource(fileNamed: "bomb.wav") {
+            buttonSound.volume = 0.08
+            buttonSound.isPositional = false
+            buttonSound.load()
+            self.soundButton = buttonSound
+        } else {
+            print("Warning: button sound file not found")
         }
     }
     
@@ -854,10 +866,16 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func shot() {
-        guard gameState == .playing, let scene = self.scene, let ship = self.ship else { return }
-        
+        // Bloqueo crítico de calidad: si la nave ya fue destruida,
+        // no se permite disparar durante la transición hacia Game Over.
+        guard gameState == .playing,
+              shipDestroyed == false,
+              let scene = self.scene,
+              let ship = self.ship,
+              ship.isHidden == false else { return }
+
         playSound(soundShot, at: ship.presentation.position, duration: 0.5)
-        
+
         let sphere = SCNSphere(radius: 1.0)
         sphere.firstMaterial?.diffuse.contents = UIColor(red: 0.8, green: 0.7, blue: 0.2, alpha: 1.0)
         sphere.firstMaterial?.emission.contents = UIColor(red: 0.8, green: 0.7, blue: 0.2, alpha: 1.0)
@@ -881,7 +899,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
     
     func destroyAsteroid(asteroid: SCNNode, withBullet bullet: SCNNode) {
-        guard gameState == .playing else { return }
+        // Si la nave ya explotó, ningún disparo residual debe seguir sumando puntos.
+        guard gameState == .playing, shipDestroyed == false else { return }
 
         guard asteroid.parent != nil,
               bullet.parent != nil,
@@ -944,6 +963,15 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         showDamageFlash()
         shakeCamera(intensity: 1.0, duration: 0.18)
         playSound(soundShipCrash, at: crashPosition, duration: 1.5)
+
+        // Limpieza inmediata de disparos activos: evita que se vean proyectiles residuales
+        // o que parezca que la nave todavía puede atacar después de explotar.
+        scene?.rootNode.enumerateChildNodes { node, _ in
+            if node.name == "bullet" || node.name == "destroyingBullet" {
+                node.removeAllActions()
+                node.removeFromParentNode()
+            }
+        }
 
         ship.removeAllActions()
 
@@ -1449,11 +1477,45 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         }
     }
 
+    func isRestartButtonTap(_ location: CGPoint, in view: UIView) -> Bool {
+        // En Game Over solo reiniciamos si el toque cae realmente sobre el texto TAP TO RESTART.
+        // Se proyecta el nodo 3D a coordenadas de pantalla para evitar que cualquier tap reinicie.
+        guard let scnView = view as? SCNView,
+              let restartNode = gameOverGroup?.childNode(withName: "restartNode", recursively: true),
+              restartNode.isHidden == false,
+              gameOverGroup?.isHidden == false else {
+            return false
+        }
+
+        let projectedPosition = scnView.projectPoint(restartNode.presentation.worldPosition)
+        let restartCenter = CGPoint(
+            x: CGFloat(projectedPosition.x),
+            y: CGFloat(projectedPosition.y)
+        )
+
+        // Área intencionalmente reducida: evita reinicios accidentales al tocar zonas vacías.
+        let restartTapArea = CGRect(
+            x: restartCenter.x - 120,
+            y: restartCenter.y - 28,
+            width: 240,
+            height: 56
+        )
+
+        return restartTapArea.contains(location)
+    }
+
+    func playButtonClick() {
+        playSound(soundButton, duration: 0.25)
+    }
+
     @objc
     func handleTap(_ gestureRecognize: UIGestureRecognizer) {
         let location = gestureRecognize.location(in: self.view)
 
         if gameState == .playing {
+            // Si la nave ya explotó, se ignora cualquier toque hasta que aparezca Game Over.
+            guard shipDestroyed == false else { return }
+
             if isPauseButtonTap(location, in: self.view) {
                 pauseGame(showOverlay: true)
             } else {
@@ -1478,7 +1540,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         }
 
         if gameState == .gameOver {
-            startGame()
+            if isRestartButtonTap(location, in: self.view) {
+                playButtonClick()
+                startGame()
+            }
             return
         }
     }
