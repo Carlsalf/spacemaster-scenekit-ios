@@ -290,10 +290,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
             if GKLocalPlayer.local.isAuthenticated {
                 self.gameCenterEnabled = true
-                print("✅ Game Center conectado")
+                print(" Game Center conectado")
             } else {
                 self.gameCenterEnabled = false
-                print("❌ Game Center no autenticado")
+                print(" Game Center no autenticado")
                 if let error = error {
                     print("Game Center error: \(error.localizedDescription)")
                 }
@@ -310,7 +310,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             if let error = error {
                 print("Game Center leaderboard error: \(error.localizedDescription)")
             } else {
-                print("✅ BEST score enviado a Game Center")
+                print(" BEST score enviado a Game Center")
             }
         }
 
@@ -340,7 +340,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             if let error = error {
                 print("Game Center achievements error: \(error.localizedDescription)")
             } else {
-                print("✅ Logros enviados a Game Center")
+                print(" Logros enviados a Game Center")
             }
         }
     }
