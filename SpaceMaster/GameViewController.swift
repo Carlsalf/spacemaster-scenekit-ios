@@ -40,6 +40,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var damageFlashOverlay : SKShapeNode?
     var lastDisplayedLevel : Int = 1
     var bestScore: Int = UserDefaults.standard.integer(forKey: "BEST_SCORE")
+    var bestScoreAtRunStart: Int = UserDefaults.standard.integer(forKey: "BEST_SCORE")
     var gameCenterEnabled: Bool = false
 
     // IDs temporales para Game Center. Deben coincidir con los creados en App Store Connect.
@@ -203,20 +204,63 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     // MARK: - Local Hi-Scores
 
     func loadLocalHighScores() {
-        localHighScores = UserDefaults.standard.array(forKey: "SPACEMASTER_TOP_5_SCORES") as? [Int] ?? []
-        localHighScores = Array(localHighScores.sorted(by: >).prefix(5))
+        let storedTopScores = UserDefaults.standard.array(forKey: "SPACEMASTER_TOP_5_SCORES") as? [Int] ?? []
+        let storedBestScore = UserDefaults.standard.integer(forKey: "BEST_SCORE")
+        let storedLastScore = UserDefaults.standard.integer(forKey: "LAST_SCORE")
+
+        var mergedScores = storedTopScores.filter { $0 > 0 }
+
+        // Migración defensiva:
+        // versiones anteriores guardaban BEST_SCORE separado del TOP 5.
+        // Si BEST era 135 pero el TOP 5 solo tenía 55 y 4, aquí se unifican.
+        if storedBestScore > 0 {
+            mergedScores.append(storedBestScore)
+        }
+
+        if storedLastScore > 0 {
+            mergedScores.append(storedLastScore)
+        }
+
+        localHighScores = Array(Set(mergedScores).sorted(by: >).prefix(5))
+
+        if let highestLocalScore = localHighScores.first, highestLocalScore != bestScore {
+            bestScore = max(bestScore, highestLocalScore)
+            UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
+        }
+
+        UserDefaults.standard.set(localHighScores, forKey: "SPACEMASTER_TOP_5_SCORES")
+        UserDefaults.standard.synchronize()
     }
 
     func saveLocalHighScores() {
+        localHighScores = Array(Set(localHighScores.filter { $0 > 0 }).sorted(by: >).prefix(5))
         UserDefaults.standard.set(localHighScores, forKey: "SPACEMASTER_TOP_5_SCORES")
+
+        if let highestLocalScore = localHighScores.first, highestLocalScore > bestScore {
+            bestScore = highestLocalScore
+            UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
+        }
+
+        UserDefaults.standard.synchronize()
+    }
+
+    @discardableResult
+    func updateBestScoreIfNeeded(_ score: Int) -> Bool {
+        guard score > bestScore else { return false }
+
+        bestScore = score
+        UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
+        UserDefaults.standard.synchronize()
+        return true
     }
 
     func registerLocalHighScore(_ score: Int) {
-        guard score >= 0 else { return }
+        guard score > 0 else { return }
 
+        loadLocalHighScores()
         localHighScores.append(score)
-        localHighScores = Array(localHighScores.sorted(by: >).prefix(5))
         saveLocalHighScores()
+        updateBestScoreIfNeeded(score)
     }
 
     func formattedLocalHighScores() -> String {
@@ -261,7 +305,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         guard gameCenterEnabled, GKLocalPlayer.local.isAuthenticated else { return }
 
         let scoreReporter = GKScore(leaderboardIdentifier: gameCenterLeaderboardID)
-        scoreReporter.value = Int64(bestScore)
+        scoreReporter.value = Int64(max(score, bestScore))
         GKScore.report([scoreReporter]) { error in
             if let error = error {
                 print("Game Center leaderboard error: \(error.localizedDescription)")
@@ -286,7 +330,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         if score >= 100 { unlock(achievement100HitsID) }
         if level >= 3 { unlock(achievementLevel3ID) }
         if level >= 5 { unlock(achievementLevel5ID) }
-        if score > 0 && score >= bestScore { unlock(achievementNewRecordID) }
+        if score > bestScoreAtRunStart && score > 0 { unlock(achievementNewRecordID) }
         if score >= 75 { unlock(achievementSurvivorID) }
         if score >= 120 { unlock(achievementMasterPilotID) }
 
@@ -1043,10 +1087,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         asteroid.removeFromParentNode()
 
         numAsteroides += 1
-        if numAsteroides > bestScore {
-            bestScore = numAsteroides
-            UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
-        }
+        updateBestScoreIfNeeded(numAsteroides)
         updateScoreHUD()
 
         let newLevel = currentLevel()
@@ -1399,7 +1440,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         let finalLevel = currentLevel()
         let finalScore = numAsteroides
-        let newRecord = finalScore >= bestScore && finalScore > 0
+        let newRecord = finalScore > bestScoreAtRunStart && finalScore > 0
 
         gameState = .gameOver
         scene?.rootNode.isPaused = false
@@ -1410,6 +1451,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         registerLocalHighScore(finalScore)
         UserDefaults.standard.set(lastScore, forKey: "LAST_SCORE")
         UserDefaults.standard.set(maxLevelReached, forKey: "MAX_LEVEL_REACHED")
+        UserDefaults.standard.synchronize()
 
         pauseOverlayLabel?.isHidden = true
         pauseOverlayBackground?.isHidden = true
@@ -1466,6 +1508,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         hud?.isHidden = false
         ship?.isHidden = false
         
+        loadLocalHighScores()
+        bestScoreAtRunStart = bestScore
         numAsteroides = 0
         lastDisplayedLevel = 1
         updateScoreHUD()
