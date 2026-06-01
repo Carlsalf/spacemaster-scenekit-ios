@@ -21,6 +21,7 @@ public enum GameState {
     case paused
     case credits
     case highScores
+    case leaderboard
     case gameOver
 }
 
@@ -57,6 +58,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var titleGroup : SCNNode?
     var creditsGroup : SCNNode?
     var highScoresGroup : SCNNode?
+    var leaderboardGroup : SCNNode?
     var gameOverGroup : SCNNode?
     var gameOverResultsText : SCNText?
     var pauseButtonLabel : SKLabelNode?
@@ -64,6 +66,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var pauseOverlayBackground : SKShapeNode?
     var lastScore: Int = UserDefaults.standard.integer(forKey: "LAST_SCORE")
     var maxLevelReached: Int = UserDefaults.standard.integer(forKey: "MAX_LEVEL_REACHED")
+    var localHighScores: [Int] = []
     
     var cameraNode : SCNNode?
     var cameraEulerAngle : SCNVector3?
@@ -80,7 +83,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var soundExplosion : SCNAudioSource?
     var soundShipCrash : SCNAudioSource?
     var soundShot : SCNAudioSource?
-    var soundButton : SCNAudioSource?
 
     var numAsteroides : Int = 0
     var velocity : Float = 0.0
@@ -94,6 +96,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        loadLocalHighScores()
         authenticateGameCenter()
 
         let scnView = self.view as! SCNView
@@ -195,6 +198,39 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
     @objc func handleAppDidEnterBackground() {
         pauseGame(showOverlay: true)
+    }
+
+    // MARK: - Local Hi-Scores
+
+    func loadLocalHighScores() {
+        localHighScores = UserDefaults.standard.array(forKey: "SPACEMASTER_TOP_5_SCORES") as? [Int] ?? []
+        localHighScores = Array(localHighScores.sorted(by: >).prefix(5))
+    }
+
+    func saveLocalHighScores() {
+        UserDefaults.standard.set(localHighScores, forKey: "SPACEMASTER_TOP_5_SCORES")
+    }
+
+    func registerLocalHighScore(_ score: Int) {
+        guard score >= 0 else { return }
+
+        localHighScores.append(score)
+        localHighScores = Array(localHighScores.sorted(by: >).prefix(5))
+        saveLocalHighScores()
+    }
+
+    func formattedLocalHighScores() -> String {
+        loadLocalHighScores()
+
+        if localHighScores.isEmpty {
+            return "NO SCORES YET"
+        }
+
+        return localHighScores.enumerated()
+            .map { index, score in
+                "\(index + 1). \(score) HITS"
+            }
+            .joined(separator: "\n")
     }
 
     // MARK: - Game Center
@@ -333,17 +369,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         } else {
             print("Error: shot sound file not found")
         }
-
-        // Sonido corto para botones de menú, pausa, resume y restart.
-        // Se usa un fallback seguro con bomb.wav para no romper el proyecto si aún no existe button_click.wav.
-        if let buttonSound = SCNAudioSource(fileNamed: "button_click.wav") ?? SCNAudioSource(fileNamed: "bomb.wav") {
-            buttonSound.volume = 0.08
-            buttonSound.isPositional = false
-            buttonSound.load()
-            self.soundButton = buttonSound
-        } else {
-            print("Warning: button sound file not found")
-        }
     }
     
     func playBackgroundMusic() {
@@ -370,6 +395,13 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         // Reproducción no posicional y estable. Evita crear nodos temporales de audio
         // durante impactos rápidos, que podía provocar crashes de SceneKit/CFRetain.
         scene.rootNode.runAction(SCNAction.playAudio(sound, waitForCompletion: false))
+    }
+
+
+    func playButtonClick() {
+        // Efecto de botón seguro. Usa el sonido de disparo a bajo volumen como fallback
+        // para evitar depender de un asset adicional antes de la entrega final.
+        playSound(soundShot, duration: 0.25)
     }
     
     func setupLights(inScene scene: SCNScene) {
@@ -418,6 +450,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         tapText.firstMaterial?.diffuse.contents = UIColor.white
         
         let tapNode = SCNNode(geometry: tapText)
+        tapNode.name = "menuTapStart"
         centerPivot(of: tapNode)
         tapNode.position = SCNVector3(0, 2, -20)
         tapNode.scale = SCNVector3(0.42, 0.42, 0.42)
@@ -436,7 +469,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         titleGroup.addChildNode(playNode)
 
         let highScoreText = SCNText(string: "HI-SCORES", extrusionDepth: 0.7)
-        highScoreText.font = UIFont(name: "University", size: 4.1) ?? UIFont.systemFont(ofSize: 4.1, weight: .bold)
+        highScoreText.font = UIFont(name: "University", size: 4.6) ?? UIFont.systemFont(ofSize: 4.6, weight: .bold)
         highScoreText.flatness = 0.2
         highScoreText.firstMaterial?.diffuse.contents = UIColor.white
 
@@ -444,11 +477,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         highScoreNode.name = "menuHighScores"
         centerPivot(of: highScoreNode)
         highScoreNode.position = SCNVector3(0, -8.3, -20)
-        highScoreNode.scale = SCNVector3(0.36, 0.36, 0.36)
+        highScoreNode.scale = SCNVector3(0.40, 0.40, 0.40)
         titleGroup.addChildNode(highScoreNode)
 
         let leaderboardText = SCNText(string: "LEADERBOARD", extrusionDepth: 0.7)
-        leaderboardText.font = UIFont(name: "University", size: 3.6) ?? UIFont.systemFont(ofSize: 3.6, weight: .bold)
+        leaderboardText.font = UIFont(name: "University", size: 4.1) ?? UIFont.systemFont(ofSize: 4.1, weight: .bold)
         leaderboardText.flatness = 0.2
         leaderboardText.firstMaterial?.diffuse.contents = UIColor.white
 
@@ -456,11 +489,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         leaderboardNode.name = "menuLeaderboard"
         centerPivot(of: leaderboardNode)
         leaderboardNode.position = SCNVector3(0, -12.2, -20)
-        leaderboardNode.scale = SCNVector3(0.32, 0.32, 0.32)
+        leaderboardNode.scale = SCNVector3(0.36, 0.36, 0.36)
         titleGroup.addChildNode(leaderboardNode)
 
         let creditsMenuText = SCNText(string: "CREDITS", extrusionDepth: 0.7)
-        creditsMenuText.font = UIFont(name: "University", size: 4.0) ?? UIFont.systemFont(ofSize: 4.0, weight: .bold)
+        creditsMenuText.font = UIFont(name: "University", size: 4.5) ?? UIFont.systemFont(ofSize: 4.5, weight: .bold)
         creditsMenuText.flatness = 0.2
         creditsMenuText.firstMaterial?.diffuse.contents = UIColor.white
 
@@ -468,7 +501,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         creditsMenuNode.name = "menuCredits"
         centerPivot(of: creditsMenuNode)
         creditsMenuNode.position = SCNVector3(0, -16.0, -20)
-        creditsMenuNode.scale = SCNVector3(0.33, 0.33, 0.33)
+        creditsMenuNode.scale = SCNVector3(0.38, 0.38, 0.38)
         titleGroup.addChildNode(creditsMenuNode)
 
         scene.rootNode.addChildNode(titleGroup)
@@ -478,19 +511,50 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         creditsGroup.name = "creditsGroup"
         creditsGroup.isHidden = true
 
-        let creditsText = SCNText(
-            string: "CREDITS\n\nDEVELOPED BY\nCARLOS CALLAGUA\n\nRESOURCES\nCHOCOLATE SHIP\nLOW POLY ROCKS\nSPACE AUDIO FX\nUNIVERSITY FONT\n\nTAP TO MENU",
-            extrusionDepth: 0.7
-        )
-        creditsText.font = UIFont(name: "University", size: 4) ?? UIFont.systemFont(ofSize: 4, weight: .bold)
-        creditsText.flatness = 0.2
-        creditsText.firstMaterial?.diffuse.contents = UIColor.white
+        let creditsTitle = SCNText(string: "CREDITS", extrusionDepth: 0.7)
+        creditsTitle.font = UIFont(name: "University", size: 6.2) ?? UIFont.systemFont(ofSize: 6.2, weight: .bold)
+        creditsTitle.flatness = 0.2
+        creditsTitle.firstMaterial?.diffuse.contents = UIColor.orange
 
-        let creditsNode = SCNNode(geometry: creditsText)
-        centerPivot(of: creditsNode)
-        creditsNode.position = SCNVector3(0, 4, -24)
-        creditsNode.scale = SCNVector3(0.24, 0.24, 0.24)
-        creditsGroup.addChildNode(creditsNode)
+        let creditsTitleNode = SCNNode(geometry: creditsTitle)
+        centerPivot(of: creditsTitleNode)
+        creditsTitleNode.position = SCNVector3(0, 9, -26)
+        creditsTitleNode.scale = SCNVector3(0.34, 0.34, 0.34)
+        creditsGroup.addChildNode(creditsTitleNode)
+
+        let creditLines: [(String, Float, UIColor, CGFloat, Float)] = [
+            ("SPACE MASTER", 4.2, UIColor.white, 4.2, 0.30),
+            ("DEVELOPED BY", 1.6, UIColor.white, 3.7, 0.28),
+            ("CARLOS ALFREDO", -0.2, UIColor.white, 3.7, 0.28),
+            ("CALLAGUA LLAQUE", -2.0, UIColor.white, 3.7, 0.28),
+            ("UNIVERSIDAD DE ALICANTE", -4.7, UIColor.white, 3.4, 0.25),
+            ("SCENEKIT SWIFT IOS", -6.3, UIColor.white, 3.4, 0.25)
+        ]
+
+        for (text, y, color, fontSize, scaleValue) in creditLines {
+            let lineText = SCNText(string: text, extrusionDepth: 0.55)
+            lineText.font = UIFont(name: "University", size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .bold)
+            lineText.flatness = 0.2
+            lineText.firstMaterial?.diffuse.contents = color
+
+            let lineNode = SCNNode(geometry: lineText)
+            centerPivot(of: lineNode)
+            lineNode.position = SCNVector3(0, y, -22)
+            lineNode.scale = SCNVector3(scaleValue, scaleValue, scaleValue)
+            creditsGroup.addChildNode(lineNode)
+        }
+
+        let creditsBackText = SCNText(string: "TAP TO MENU", extrusionDepth: 0.7)
+        creditsBackText.font = UIFont(name: "University", size: 4.0) ?? UIFont.systemFont(ofSize: 4.0, weight: .bold)
+        creditsBackText.flatness = 0.2
+        creditsBackText.firstMaterial?.diffuse.contents = UIColor.orange
+
+        let creditsBackNode = SCNNode(geometry: creditsBackText)
+        creditsBackNode.name = "backToMenu"
+        centerPivot(of: creditsBackNode)
+        creditsBackNode.position = SCNVector3(0, -9.0, -20)
+        creditsBackNode.scale = SCNVector3(0.32, 0.32, 0.32)
+        creditsGroup.addChildNode(creditsBackNode)
 
         scene.rootNode.addChildNode(creditsGroup)
         self.creditsGroup = creditsGroup
@@ -500,41 +564,94 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         highScoresGroup.isHidden = true
 
         let highScoresText = SCNText(string: "HI-SCORES", extrusionDepth: 0.7)
-        highScoresText.font = UIFont(name: "University", size: 6) ?? UIFont.systemFont(ofSize: 6, weight: .bold)
+        highScoresText.font = UIFont(name: "University", size: 6.4) ?? UIFont.systemFont(ofSize: 6.4, weight: .bold)
         highScoresText.flatness = 0.2
         highScoresText.firstMaterial?.diffuse.contents = UIColor.orange
 
         let highScoresNode = SCNNode(geometry: highScoresText)
         centerPivot(of: highScoresNode)
         highScoresNode.position = SCNVector3(0, 9, -26)
-        highScoresNode.scale = SCNVector3(0.34, 0.34, 0.34)
+        highScoresNode.scale = SCNVector3(0.38, 0.38, 0.38)
         highScoresGroup.addChildNode(highScoresNode)
 
         let highScoresInfo = SCNText(string: "", extrusionDepth: 0.7)
-        highScoresInfo.font = UIFont(name: "University", size: 4) ?? UIFont.systemFont(ofSize: 4, weight: .bold)
+        highScoresInfo.font = UIFont(name: "University", size: 4.8) ?? UIFont.systemFont(ofSize: 4.8, weight: .bold)
         highScoresInfo.flatness = 0.2
         highScoresInfo.firstMaterial?.diffuse.contents = UIColor.white
 
         let highScoresInfoNode = SCNNode(geometry: highScoresInfo)
         highScoresInfoNode.name = "highScoresInfoNode"
         centerPivot(of: highScoresInfoNode)
-        highScoresInfoNode.position = SCNVector3(0, 1, -22)
-        highScoresInfoNode.scale = SCNVector3(0.28, 0.28, 0.28)
+        highScoresInfoNode.position = SCNVector3(0, 0.8, -22)
+        highScoresInfoNode.scale = SCNVector3(0.30, 0.30, 0.30)
         highScoresGroup.addChildNode(highScoresInfoNode)
 
         let highScoresBack = SCNText(string: "TAP TO MENU", extrusionDepth: 0.7)
-        highScoresBack.font = UIFont(name: "University", size: 3.2) ?? UIFont.systemFont(ofSize: 3.2, weight: .bold)
+        highScoresBack.font = UIFont(name: "University", size: 4.0) ?? UIFont.systemFont(ofSize: 4.0, weight: .bold)
         highScoresBack.flatness = 0.2
         highScoresBack.firstMaterial?.diffuse.contents = UIColor.orange
 
         let highScoresBackNode = SCNNode(geometry: highScoresBack)
+        highScoresBackNode.name = "backToMenu"
         centerPivot(of: highScoresBackNode)
-        highScoresBackNode.position = SCNVector3(0, -8, -20)
-        highScoresBackNode.scale = SCNVector3(0.26, 0.26, 0.26)
+        highScoresBackNode.position = SCNVector3(0, -8.8, -20)
+        highScoresBackNode.scale = SCNVector3(0.32, 0.32, 0.32)
         highScoresGroup.addChildNode(highScoresBackNode)
 
         scene.rootNode.addChildNode(highScoresGroup)
         self.highScoresGroup = highScoresGroup
+
+
+        let leaderboardGroup = SCNNode()
+        leaderboardGroup.name = "leaderboardGroup"
+        leaderboardGroup.isHidden = true
+
+        let leaderboardTitle = SCNText(string: "LEADERBOARD", extrusionDepth: 0.7)
+        leaderboardTitle.font = UIFont(name: "University", size: 5.8) ?? UIFont.systemFont(ofSize: 5.8, weight: .bold)
+        leaderboardTitle.flatness = 0.2
+        leaderboardTitle.firstMaterial?.diffuse.contents = UIColor.orange
+
+        let leaderboardTitleNode = SCNNode(geometry: leaderboardTitle)
+        centerPivot(of: leaderboardTitleNode)
+        leaderboardTitleNode.position = SCNVector3(0, 9, -26)
+        leaderboardTitleNode.scale = SCNVector3(0.34, 0.34, 0.34)
+        leaderboardGroup.addChildNode(leaderboardTitleNode)
+
+        let leaderboardLines: [(String, Float, UIColor, CGFloat, Float)] = [
+            ("GAME CENTER", 3.2, UIColor.white, 4.1, 0.30),
+            ("ONLINE RANKING", 1.3, UIColor.white, 3.7, 0.28),
+            ("HIGH SCORE", -1.3, UIColor.white, 3.7, 0.28),
+            ("SPACEMASTER", -3.0, UIColor.white, 3.7, 0.28),
+            ("WAITING FOR ACCESS", -5.5, UIColor.white, 3.4, 0.25)
+        ]
+
+        for (text, y, color, fontSize, scaleValue) in leaderboardLines {
+            let lineText = SCNText(string: text, extrusionDepth: 0.55)
+            lineText.font = UIFont(name: "University", size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .bold)
+            lineText.flatness = 0.2
+            lineText.firstMaterial?.diffuse.contents = color
+
+            let lineNode = SCNNode(geometry: lineText)
+            centerPivot(of: lineNode)
+            lineNode.position = SCNVector3(0, y, -22)
+            lineNode.scale = SCNVector3(scaleValue, scaleValue, scaleValue)
+            leaderboardGroup.addChildNode(lineNode)
+        }
+
+        let leaderboardBackText = SCNText(string: "TAP TO MENU", extrusionDepth: 0.7)
+        leaderboardBackText.font = UIFont(name: "University", size: 4.0) ?? UIFont.systemFont(ofSize: 4.0, weight: .bold)
+        leaderboardBackText.flatness = 0.2
+        leaderboardBackText.firstMaterial?.diffuse.contents = UIColor.orange
+
+        let leaderboardBackNode = SCNNode(geometry: leaderboardBackText)
+        leaderboardBackNode.name = "backToMenu"
+        centerPivot(of: leaderboardBackNode)
+        leaderboardBackNode.position = SCNVector3(0, -8.8, -20)
+        leaderboardBackNode.scale = SCNVector3(0.32, 0.32, 0.32)
+        leaderboardGroup.addChildNode(leaderboardBackNode)
+
+        scene.rootNode.addChildNode(leaderboardGroup)
+        self.leaderboardGroup = leaderboardGroup
 
         let gameOverGroup = SCNNode()
         gameOverGroup.name = "gameOverGroup"
@@ -1258,6 +1375,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         titleGroup?.isHidden = false
         creditsGroup?.isHidden = true
         highScoresGroup?.isHidden = true
+        leaderboardGroup?.isHidden = true
         gameOverGroup?.isHidden = true
         hud?.isHidden = true
         pauseOverlayLabel?.isHidden = true
@@ -1289,6 +1407,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         lastScore = finalScore
         maxLevelReached = max(maxLevelReached, finalLevel)
+        registerLocalHighScore(finalScore)
         UserDefaults.standard.set(lastScore, forKey: "LAST_SCORE")
         UserDefaults.standard.set(maxLevelReached, forKey: "MAX_LEVEL_REACHED")
 
@@ -1340,6 +1459,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         clearGameNodes()
         
         titleGroup?.isHidden = true
+        creditsGroup?.isHidden = true
+        highScoresGroup?.isHidden = true
+        leaderboardGroup?.isHidden = true
         gameOverGroup?.isHidden = true
         hud?.isHidden = false
         ship?.isHidden = false
@@ -1409,15 +1531,28 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         hud?.isHidden = true
         titleGroup?.isHidden = true
         creditsGroup?.isHidden = true
+        leaderboardGroup?.isHidden = true
         gameOverGroup?.isHidden = true
         highScoresGroup?.isHidden = false
         ship?.isHidden = true
 
         if let infoNode = highScoresGroup?.childNode(withName: "highScoresInfoNode", recursively: true),
            let infoText = infoNode.geometry as? SCNText {
-            infoText.string = "BEST: \(bestScore)\nLAST: \(lastScore)\nMAX LEVEL: \(maxLevelReached)"
+            infoText.string = "TOP 5 LOCAL\n\(formattedLocalHighScores())\n\nBEST: \(bestScore)\nLAST: \(lastScore)\nMAX LVL: \(maxLevelReached)"
             centerPivot(of: infoNode)
         }
+    }
+
+    func showLeaderboard() {
+        gameState = .leaderboard
+        clearGameNodes()
+        hud?.isHidden = true
+        titleGroup?.isHidden = true
+        highScoresGroup?.isHidden = true
+        creditsGroup?.isHidden = true
+        gameOverGroup?.isHidden = true
+        leaderboardGroup?.isHidden = false
+        ship?.isHidden = true
     }
 
     func showCredits() {
@@ -1426,6 +1561,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         hud?.isHidden = true
         titleGroup?.isHidden = true
         highScoresGroup?.isHidden = true
+        leaderboardGroup?.isHidden = true
         gameOverGroup?.isHidden = true
         creditsGroup?.isHidden = false
         ship?.isHidden = true
@@ -1463,23 +1599,147 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         return location.x <= 150 && location.y >= view.bounds.height - bottomTapArea
     }
 
-    func handleTitleMenuTap(_ location: CGPoint, in view: UIView) {
-        let relativeY = location.y / max(view.bounds.height, 1.0)
+    func projectedCenter(of nodeName: String, in group: SCNNode?) -> CGPoint? {
+        guard let scnView = self.view as? SCNView,
+              let group = group,
+              group.isHidden == false,
+              let node = group.childNode(withName: nodeName, recursively: true) else {
+            return nil
+        }
 
-        if relativeY > 0.70 {
-            showCredits()
-        } else if relativeY > 0.60 {
-            showGameCenterDashboard()
-        } else if relativeY > 0.50 {
-            showHighScores()
-        } else {
+        let projected = scnView.projectPoint(node.presentation.worldPosition)
+        return CGPoint(x: CGFloat(projected.x), y: CGFloat(projected.y))
+    }
+
+    func isProjectedNodeTap(
+        _ nodeName: String,
+        in group: SCNNode?,
+        location: CGPoint,
+        view: UIView,
+        horizontalPadding: CGFloat,
+        verticalPadding: CGFloat
+    ) -> Bool {
+        guard let scnView = view as? SCNView,
+              let group = group,
+              group.isHidden == false,
+              let node = group.childNode(withName: nodeName, recursively: true) else {
+            return false
+        }
+
+        let projected = scnView.projectPoint(node.presentation.worldPosition)
+        let center = CGPoint(x: CGFloat(projected.x), y: CGFloat(projected.y))
+
+        let tapArea = CGRect(
+            x: center.x - horizontalPadding,
+            y: center.y - verticalPadding,
+            width: horizontalPadding * 2.0,
+            height: verticalPadding * 2.0
+        )
+
+        return tapArea.contains(location)
+    }
+
+    func handleTitleMenuTap(_ location: CGPoint, in view: UIView) {
+        // Detección precisa y estable del menú principal:
+        // 1) Hit-test real sobre las letras 3D.
+        // 2) Fallback por cercanía al centro visual de cada opción.
+        // Esto corrige el problema de tocar HI-SCORES y que se inicie PLAY.
+
+        if let scnView = view as? SCNView {
+            let hits = scnView.hitTest(location, options: [
+                SCNHitTestOption.boundingBoxOnly: true,
+                SCNHitTestOption.searchMode: SCNHitTestSearchMode.all.rawValue
+            ])
+
+            for hit in hits {
+                var node: SCNNode? = hit.node
+
+                while let current = node {
+                    switch current.name {
+                    case "menuTapStart", "menuPlay":
+                        playButtonClick()
+                        startGame()
+                        return
+
+                    case "menuHighScores":
+                        playButtonClick()
+                        showHighScores()
+                        return
+
+                    case "menuLeaderboard":
+                        playButtonClick()
+                        showLeaderboard()
+                        return
+
+                    case "menuCredits":
+                        playButtonClick()
+                        showCredits()
+                        return
+
+                    default:
+                        node = current.parent
+                    }
+                }
+            }
+        }
+
+        // Fallback: elegir la opción más cercana al dedo.
+        // Los márgenes son horizontales, pero la decisión se hace por la distancia vertical,
+        // evitando que la caja de PLAY invada HI-SCORES.
+        let options: [(node: String, action: String, maxX: CGFloat, maxY: CGFloat)] = [
+            ("menuPlay", "play", 135, 30),
+            ("menuHighScores", "scores", 180, 34),
+            ("menuLeaderboard", "leaderboard", 210, 34),
+            ("menuCredits", "credits", 155, 34)
+        ]
+
+        var selected: (action: String, distance: CGFloat)?
+
+        for option in options {
+            guard let center = projectedCenter(of: option.node, in: titleGroup) else { continue }
+
+            let dx = abs(location.x - center.x)
+            let dy = abs(location.y - center.y)
+
+            guard dx <= option.maxX, dy <= option.maxY else { continue }
+
+            let distance = dy + (dx * 0.18)
+            if selected == nil || distance < selected!.distance {
+                selected = (option.action, distance)
+            }
+        }
+
+        if let selected = selected {
+            playButtonClick()
+
+            switch selected.action {
+            case "play":
+                startGame()
+
+            case "scores":
+                showHighScores()
+
+            case "leaderboard":
+                showLeaderboard()
+
+            case "credits":
+                showCredits()
+
+            default:
+                break
+            }
+
+            return
+        }
+
+        // TAP TO START queda separado para no tragarse las opciones del menú.
+        if isProjectedNodeTap("menuTapStart", in: titleGroup, location: location, view: view, horizontalPadding: 175, verticalPadding: 34) {
+            playButtonClick()
             startGame()
         }
     }
 
     func isRestartButtonTap(_ location: CGPoint, in view: UIView) -> Bool {
-        // En Game Over solo reiniciamos si el toque cae realmente sobre el texto TAP TO RESTART.
-        // Se proyecta el nodo 3D a coordenadas de pantalla para evitar que cualquier tap reinicie.
         guard let scnView = view as? SCNView,
               let restartNode = gameOverGroup?.childNode(withName: "restartNode", recursively: true),
               restartNode.isHidden == false,
@@ -1488,12 +1748,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         }
 
         let projectedPosition = scnView.projectPoint(restartNode.presentation.worldPosition)
-        let restartCenter = CGPoint(
-            x: CGFloat(projectedPosition.x),
-            y: CGFloat(projectedPosition.y)
-        )
+        let restartCenter = CGPoint(x: CGFloat(projectedPosition.x), y: CGFloat(projectedPosition.y))
 
-        // Área intencionalmente reducida: evita reinicios accidentales al tocar zonas vacías.
         let restartTapArea = CGRect(
             x: restartCenter.x - 120,
             y: restartCenter.y - 28,
@@ -1502,10 +1758,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         )
 
         return restartTapArea.contains(location)
-    }
-
-    func playButtonClick() {
-        playSound(soundButton, duration: 0.25)
     }
 
     @objc
@@ -1534,8 +1786,27 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             return
         }
 
-        if gameState == .credits || gameState == .highScores {
-            showTitle()
+        if gameState == .credits {
+            if isProjectedNodeTap("backToMenu", in: creditsGroup, location: location, view: self.view, horizontalPadding: 145, verticalPadding: 34) {
+                playButtonClick()
+                showTitle()
+            }
+            return
+        }
+
+        if gameState == .highScores {
+            if isProjectedNodeTap("backToMenu", in: highScoresGroup, location: location, view: self.view, horizontalPadding: 145, verticalPadding: 34) {
+                playButtonClick()
+                showTitle()
+            }
+            return
+        }
+
+        if gameState == .leaderboard {
+            if isProjectedNodeTap("backToMenu", in: leaderboardGroup, location: location, view: self.view, horizontalPadding: 145, verticalPadding: 34) {
+                playButtonClick()
+                showTitle()
+            }
             return
         }
 
