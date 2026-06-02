@@ -43,18 +43,21 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var bestScoreAtRunStart: Int = UserDefaults.standard.integer(forKey: "BEST_SCORE")
     var gameCenterEnabled: Bool = false
 
-    // IDs temporales para Game Center. Deben coincidir con los creados en App Store Connect.
-    let gameCenterLeaderboardID = "spacemaster_highscore"
-    let achievementFirstHitID = "spacemaster_first_hit"
-    let achievement10HitsID = "spacemaster_10_hits"
-    let achievement25HitsID = "spacemaster_25_hits"
-    let achievement50HitsID = "spacemaster_50_hits"
-    let achievement100HitsID = "spacemaster_100_hits"
-    let achievementLevel3ID = "spacemaster_level_3"
-    let achievementLevel5ID = "spacemaster_level_5"
-    let achievementNewRecordID = "spacemaster_new_record"
-    let achievementSurvivorID = "spacemaster_survivor"
-    let achievementMasterPilotID = "spacemaster_master_pilot"
+    // IDs oficiales/preparados para Game Center.
+    // El leaderboard ya fue creado en App Store Connect con este ID exacto.
+    let gameCenterLeaderboardID = "com.carlsalf.spacemasterie.highscore"
+
+    // Estos IDs deben crearse igual en App Store Connect > Game Center > Logros.
+    let achievementFirstHitID = "com.carlsalf.spacemasterie.achievement.first_hit"
+    let achievement10HitsID = "com.carlsalf.spacemasterie.achievement.10_hits"
+    let achievement25HitsID = "com.carlsalf.spacemasterie.achievement.25_hits"
+    let achievement50HitsID = "com.carlsalf.spacemasterie.achievement.50_hits"
+    let achievement100HitsID = "com.carlsalf.spacemasterie.achievement.100_hits"
+    let achievementLevel3ID = "com.carlsalf.spacemasterie.achievement.level_3"
+    let achievementLevel5ID = "com.carlsalf.spacemasterie.achievement.level_5"
+    let achievementLevel8ID = "com.carlsalf.spacemasterie.achievement.level_8"
+    let achievementNewRecordID = "com.carlsalf.spacemasterie.achievement.new_record"
+    let achievementSurvivorID = "com.carlsalf.spacemasterie.achievement.survivor"
 
     var titleGroup : SCNNode?
     var creditsGroup : SCNNode?
@@ -204,54 +207,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     // MARK: - Local Hi-Scores
 
     func loadLocalHighScores() {
-        let storedTopScores = UserDefaults.standard.array(forKey: "SPACEMASTER_TOP_5_SCORES") as? [Int] ?? []
-        let storedBestScore = UserDefaults.standard.integer(forKey: "BEST_SCORE")
-        let storedLastScore = UserDefaults.standard.integer(forKey: "LAST_SCORE")
-
-        var mergedScores = storedTopScores.filter { $0 > 0 }
-
-        // Migración defensiva:
-        // versiones anteriores guardaban BEST_SCORE separado del TOP 5.
-        // Si BEST era 135 pero el TOP 5 solo tenía 55 y 4, aquí se unifican.
-        if storedBestScore > 0 {
-            mergedScores.append(storedBestScore)
-        }
-
-        if storedLastScore > 0 {
-            mergedScores.append(storedLastScore)
-        }
-
-        localHighScores = Array(Set(mergedScores).sorted(by: >).prefix(5))
-
-        if let highestLocalScore = localHighScores.first, highestLocalScore != bestScore {
-            bestScore = max(bestScore, highestLocalScore)
-            UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
-        }
-
-        UserDefaults.standard.set(localHighScores, forKey: "SPACEMASTER_TOP_5_SCORES")
-        UserDefaults.standard.synchronize()
+        localHighScores = UserDefaults.standard.array(forKey: "SPACEMASTER_TOP_5_SCORES") as? [Int] ?? []
+        localHighScores = Array(localHighScores.sorted(by: >).prefix(5))
     }
 
     func saveLocalHighScores() {
-        localHighScores = Array(Set(localHighScores.filter { $0 > 0 }).sorted(by: >).prefix(5))
         UserDefaults.standard.set(localHighScores, forKey: "SPACEMASTER_TOP_5_SCORES")
-
-        if let highestLocalScore = localHighScores.first, highestLocalScore > bestScore {
-            bestScore = highestLocalScore
-            UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
-        }
-
-        UserDefaults.standard.synchronize()
-    }
-
-    @discardableResult
-    func updateBestScoreIfNeeded(_ score: Int) -> Bool {
-        guard score > bestScore else { return false }
-
-        bestScore = score
-        UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
-        UserDefaults.standard.synchronize()
-        return true
     }
 
     func registerLocalHighScore(_ score: Int) {
@@ -259,8 +220,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
         loadLocalHighScores()
         localHighScores.append(score)
+        localHighScores = Array(Set(localHighScores.filter { $0 > 0 }).sorted(by: >).prefix(5))
         saveLocalHighScores()
-        updateBestScoreIfNeeded(score)
     }
 
     func formattedLocalHighScores() -> String {
@@ -290,10 +251,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
             if GKLocalPlayer.local.isAuthenticated {
                 self.gameCenterEnabled = true
-                print(" Game Center conectado")
+                print("✅ Game Center conectado")
             } else {
                 self.gameCenterEnabled = false
-                print(" Game Center no autenticado")
+                print("❌ Game Center no autenticado")
                 if let error = error {
                     print("Game Center error: \(error.localizedDescription)")
                 }
@@ -302,15 +263,35 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
 
     func reportGameCenterResults(score: Int, level: Int) {
-        guard gameCenterEnabled, GKLocalPlayer.local.isAuthenticated else { return }
+        guard gameCenterEnabled, GKLocalPlayer.local.isAuthenticated else {
+            print("Game Center no autenticado: no se envía puntuación online")
+            return
+        }
 
-        let scoreReporter = GKScore(leaderboardIdentifier: gameCenterLeaderboardID)
-        scoreReporter.value = Int64(max(score, bestScore))
-        GKScore.report([scoreReporter]) { error in
-            if let error = error {
-                print("Game Center leaderboard error: \(error.localizedDescription)")
-            } else {
-                print(" BEST score enviado a Game Center")
+        let scoreToReport = max(score, bestScore)
+
+        if #available(iOS 14.0, *) {
+            GKLeaderboard.submitScore(
+                scoreToReport,
+                context: 0,
+                player: GKLocalPlayer.local,
+                leaderboardIDs: [gameCenterLeaderboardID]
+            ) { error in
+                if let error = error {
+                    print("Game Center leaderboard error: \(error.localizedDescription)")
+                } else {
+                    print("✅ BEST score enviado a Game Center: \(scoreToReport)")
+                }
+            }
+        } else {
+            let scoreReporter = GKScore(leaderboardIdentifier: gameCenterLeaderboardID)
+            scoreReporter.value = Int64(scoreToReport)
+            GKScore.report([scoreReporter]) { error in
+                if let error = error {
+                    print("Game Center leaderboard error: \(error.localizedDescription)")
+                } else {
+                    print("✅ BEST score enviado a Game Center: \(scoreToReport)")
+                }
             }
         }
 
@@ -330,9 +311,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         if score >= 100 { unlock(achievement100HitsID) }
         if level >= 3 { unlock(achievementLevel3ID) }
         if level >= 5 { unlock(achievementLevel5ID) }
+        if level >= 8 { unlock(achievementLevel8ID) }
         if score > bestScoreAtRunStart && score > 0 { unlock(achievementNewRecordID) }
         if score >= 75 { unlock(achievementSurvivorID) }
-        if score >= 120 { unlock(achievementMasterPilotID) }
 
         guard achievements.isEmpty == false else { return }
 
@@ -340,13 +321,16 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             if let error = error {
                 print("Game Center achievements error: \(error.localizedDescription)")
             } else {
-                print(" Logros enviados a Game Center")
+                print("✅ Logros enviados a Game Center")
             }
         }
     }
 
     func showGameCenterDashboard() {
-        guard GKLocalPlayer.local.isAuthenticated else { return }
+        guard GKLocalPlayer.local.isAuthenticated else {
+            authenticateGameCenter()
+            return
+        }
 
         let gameCenterVC = GKGameCenterViewController()
         gameCenterVC.gameCenterDelegate = self
@@ -666,7 +650,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             ("ONLINE RANKING", 1.3, UIColor.white, 3.7, 0.28),
             ("HIGH SCORE", -1.3, UIColor.white, 3.7, 0.28),
             ("SPACEMASTER", -3.0, UIColor.white, 3.7, 0.28),
-            ("WAITING FOR ACCESS", -5.5, UIColor.white, 3.4, 0.25)
+            ("TAP TO OPEN", -5.5, UIColor.white, 3.4, 0.25)
         ]
 
         for (text, y, color, fontSize, scaleValue) in leaderboardLines {
@@ -884,7 +868,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
 
     func currentLevel() -> Int {
-        return min(5, (numAsteroides / 10) + 1)
+        return min(8, (numAsteroides / 10) + 1)
     }
 
     func currentAsteroidDuration() -> TimeInterval {
@@ -1087,7 +1071,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         asteroid.removeFromParentNode()
 
         numAsteroides += 1
-        updateBestScoreIfNeeded(numAsteroides)
+        if numAsteroides > bestScore {
+            bestScore = numAsteroides
+            UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
+        }
         updateScoreHUD()
 
         let newLevel = currentLevel()
@@ -1451,7 +1438,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         registerLocalHighScore(finalScore)
         UserDefaults.standard.set(lastScore, forKey: "LAST_SCORE")
         UserDefaults.standard.set(maxLevelReached, forKey: "MAX_LEVEL_REACHED")
-        UserDefaults.standard.synchronize()
 
         pauseOverlayLabel?.isHidden = true
         pauseOverlayBackground?.isHidden = true
@@ -1508,9 +1494,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         hud?.isHidden = false
         ship?.isHidden = false
         
-        loadLocalHighScores()
-        bestScoreAtRunStart = bestScore
         numAsteroides = 0
+        bestScoreAtRunStart = bestScore
         lastDisplayedLevel = 1
         updateScoreHUD()
         
@@ -1850,6 +1835,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             if isProjectedNodeTap("backToMenu", in: leaderboardGroup, location: location, view: self.view, horizontalPadding: 145, verticalPadding: 34) {
                 playButtonClick()
                 showTitle()
+            } else {
+                playButtonClick()
+                showGameCenterDashboard()
             }
             return
         }
