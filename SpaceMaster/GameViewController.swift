@@ -207,8 +207,23 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     // MARK: - Local Hi-Scores
 
     func loadLocalHighScores() {
-        localHighScores = UserDefaults.standard.array(forKey: "SPACEMASTER_TOP_5_SCORES") as? [Int] ?? []
-        localHighScores = Array(localHighScores.sorted(by: >).prefix(5))
+        let storedScores = UserDefaults.standard.array(forKey: "SPACEMASTER_TOP_5_SCORES") as? [Int] ?? []
+
+        // Fuente única y coherente para la pantalla HI-SCORES:
+        // se integran el TOP local, el BEST histórico y el LAST si existían
+        // antes de la nueva estructura TOP 5. Así evitamos que BEST quede
+        // fuera del ranking local, que fue la inconsistencia detectada.
+        var mergedScores = storedScores
+        if bestScore > 0 { mergedScores.append(bestScore) }
+        if lastScore > 0 { mergedScores.append(lastScore) }
+
+        localHighScores = Array(Set(mergedScores.filter { $0 > 0 }).sorted(by: >).prefix(5))
+        saveLocalHighScores()
+
+        if let realBest = localHighScores.first, realBest > bestScore {
+            bestScore = realBest
+            UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
+        }
     }
 
     func saveLocalHighScores() {
@@ -222,6 +237,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         localHighScores.append(score)
         localHighScores = Array(Set(localHighScores.filter { $0 > 0 }).sorted(by: >).prefix(5))
         saveLocalHighScores()
+
+        if score > bestScore {
+            bestScore = score
+            UserDefaults.standard.set(bestScore, forKey: "BEST_SCORE")
+        }
     }
 
     func formattedLocalHighScores() -> String {
@@ -245,7 +265,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             guard let self = self else { return }
 
             if let viewController = viewController {
-                self.present(viewController, animated: true)
+                DispatchQueue.main.async {
+                    self.present(viewController, animated: true)
+                }
                 return
             }
 
