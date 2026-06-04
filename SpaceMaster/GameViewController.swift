@@ -42,13 +42,15 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     var bestScore: Int = UserDefaults.standard.integer(forKey: "BEST_SCORE")
     var gameCenterEnabled: Bool = false
 
-    // IDs oficiales de Game Center configurados en App Store Connect.
-    // Clasificación creada: Game Center > Clasificaciones > High Score.
+    // IDs oficiales de Game Center creados en App Store Connect.
+    // Deben coincidir exactamente con los identificadores configurados en la ficha del juego.
     let gameCenterLeaderboardID = "com.carlsalf.spacemasterie.highscore"
 
-    // Logro creado: Game Center > Logros > Primer Vuelo.
-    // IMPORTANTE: debe coincidir exactamente con el ID definido en App Store Connect.
-    let achievementFirstFlightID = "com.carlsalf.spacemasterie.achievement.firstflight"
+    let achievementFirstFlightID = "com.carlsalf.spacemasterie.achievement.firstflight"      // Primer Vuelo
+    let achievementSurvivor50ID = "com.carlsalf.spacemasterie.achievement.survivor50"        // Superviviente
+    let achievementLevel5ID = "com.carlsalf.spacemasterie.achievement.level5"                // Veterano Espacial
+    let achievementDestroyer100ID = "com.carlsalf.spacemasterie.achievement.destroyer100"    // Destructor
+    let achievementLevel10ID = "com.carlsalf.spacemasterie.achievement.level10"              // Maestro Galáctico
 
     var titleGroup : SCNNode?
     var creditsGroup : SCNNode?
@@ -92,6 +94,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         super.viewDidLoad()
 
         loadLocalHighScores()
+        // Recalcula el nivel máximo histórico según el mejor score guardado.
+        // La progresión actual llega hasta LVL 10 para que el logro Maestro Galáctico sea alcanzable.
+        maxLevelReached = max(maxLevelReached, level(forHits: bestScore))
+        UserDefaults.standard.set(maxLevelReached, forKey: "MAX_LEVEL_REACHED")
         authenticateGameCenter()
 
         let scnView = self.view as! SCNView
@@ -242,9 +248,18 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             if GKLocalPlayer.local.isAuthenticated {
                 self.gameCenterEnabled = true
                 print("✅ Game Center conectado")
+
+                // Sincroniza el BEST histórico y los logros al iniciar sesión en Game Center.
+                // Si el usuario ya tenía un BEST alto, se reconocen los logros correspondientes.
+                if self.bestScore > 0 {
+                    let historicalLevel = self.level(forHits: self.bestScore)
+                    self.maxLevelReached = max(self.maxLevelReached, historicalLevel)
+                    UserDefaults.standard.set(self.maxLevelReached, forKey: "MAX_LEVEL_REACHED")
+                    self.reportGameCenterResults(score: self.bestScore, level: self.maxLevelReached)
+                }
             } else {
                 self.gameCenterEnabled = false
-                print("❌ Game Center no autenticado")
+                print(" Game Center no autenticado")
                 if let error = error {
                     print("Game Center error: \(error.localizedDescription)")
                 }
@@ -258,8 +273,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             return
         }
 
-        // Se envía el mejor valor disponible para no reducir el marcador online.
         let scoreToReport = max(score, bestScore)
+        let levelToReport = max(level, maxLevelReached, self.level(forHits: scoreToReport))
 
         if #available(iOS 14.0, *) {
             GKLeaderboard.submitScore(
@@ -271,7 +286,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
                 if let error = error {
                     print("Game Center leaderboard error: \(error.localizedDescription)")
                 } else {
-                    print("✅ BEST score enviado a Game Center: \(scoreToReport)")
+                    print(" BEST score enviado a Game Center: \(scoreToReport)")
                 }
             }
         } else {
@@ -281,25 +296,51 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
                 if let error = error {
                     print("Game Center leaderboard error: \(error.localizedDescription)")
                 } else {
-                    print("✅ BEST score enviado a Game Center: \(scoreToReport)")
+                    print(" BEST score enviado a Game Center: \(scoreToReport)")
                 }
             }
         }
 
-        // En App Store Connect actualmente está creado el logro:
-        // Primer Vuelo -> com.carlsalf.spacemasterie.achievement.firstflight
-        // Por seguridad, solo se reporta este logro para evitar errores por IDs no creados.
-        if score > 0 || level > 1 {
-            let firstFlightAchievement = GKAchievement(identifier: achievementFirstFlightID)
-            firstFlightAchievement.percentComplete = 100.0
-            firstFlightAchievement.showsCompletionBanner = true
+        reportGameCenterAchievements(score: scoreToReport, level: levelToReport)
+    }
 
-            GKAchievement.report([firstFlightAchievement]) { error in
-                if let error = error {
-                    print("Game Center achievement Primer Vuelo error: \(error.localizedDescription)")
-                } else {
-                    print("✅ Logro Primer Vuelo enviado a Game Center")
-                }
+    func reportGameCenterAchievements(score: Int, level: Int) {
+        guard gameCenterEnabled, GKLocalPlayer.local.isAuthenticated else { return }
+
+        var achievements: [GKAchievement] = []
+
+        func unlock(_ identifier: String, when condition: Bool) {
+            guard condition else { return }
+
+            let achievement = GKAchievement(identifier: identifier)
+            achievement.percentComplete = 100.0
+            achievement.showsCompletionBanner = true
+            achievements.append(achievement)
+        }
+
+        // Logro 1: Primer Vuelo.
+        unlock(achievementFirstFlightID, when: score >= 1)
+
+        // Logro 2: Superviviente.
+        unlock(achievementSurvivor50ID, when: score >= 50)
+
+        // Logro 3: Veterano Espacial.
+        unlock(achievementLevel5ID, when: level >= 5)
+
+        // Logro 4: Destructor.
+        unlock(achievementDestroyer100ID, when: score >= 100)
+
+        // Logro 5: Maestro Galáctico.
+        unlock(achievementLevel10ID, when: level >= 10)
+
+        guard achievements.isEmpty == false else { return }
+
+        GKAchievement.report(achievements) { error in
+            if let error = error {
+                print("Game Center achievements error: \(error.localizedDescription)")
+            } else {
+                let ids = achievements.map { $0.identifier }.joined(separator: ", ")
+                print(" Logros enviados a Game Center: \(ids)")
             }
         }
     }
@@ -842,8 +883,22 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         updateScoreHUD()
     }
 
+    func level(forHits hits: Int) -> Int {
+        // Progresión validada:
+        // 0-9 hits  -> LVL 1
+        // 10-19     -> LVL 2
+        // 20-29     -> LVL 3
+        // ...
+        // 90+       -> LVL 10
+        //
+        // Corrección importante:
+        // antes estaba limitado a LVL 5 con min(5, ...), por eso 253 hits seguían mostrando LVL 5.
+        // Ahora se amplía a LVL 10 para que el logro "Maestro Galáctico" sea alcanzable.
+        return min(10, max(1, (hits / 10) + 1))
+    }
+
     func currentLevel() -> Int {
-        return min(5, (numAsteroides / 10) + 1)
+        return level(forHits: numAsteroides)
     }
 
     func currentAsteroidDuration() -> TimeInterval {
@@ -1409,7 +1464,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
         stopBackgroundMusic()
 
         lastScore = finalScore
-        maxLevelReached = max(maxLevelReached, finalLevel)
+        maxLevelReached = max(maxLevelReached, finalLevel, level(forHits: bestScore))
         registerLocalHighScore(finalScore)
         UserDefaults.standard.set(lastScore, forKey: "LAST_SCORE")
         UserDefaults.standard.set(maxLevelReached, forKey: "MAX_LEVEL_REACHED")
@@ -1547,6 +1602,14 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
     }
 
     func showLeaderboard() {
+        // Para la entrega final: LEADERBOARD abre directamente el panel oficial de Apple Game Center.
+        // Es la evidencia más clara para demostrar ranking online ante el profesor.
+        if GKLocalPlayer.local.isAuthenticated {
+            showGameCenterDashboard()
+            return
+        }
+
+        // Fallback visual si Game Center aún no ha terminado de autenticar.
         gameState = .leaderboard
         clearGameNodes()
         hud?.isHidden = true
@@ -1809,6 +1872,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
             if isProjectedNodeTap("backToMenu", in: leaderboardGroup, location: location, view: self.view, horizontalPadding: 145, verticalPadding: 34) {
                 playButtonClick()
                 showTitle()
+            } else if GKLocalPlayer.local.isAuthenticated {
+                playButtonClick()
+                showGameCenterDashboard()
             }
             return
         }
