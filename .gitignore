@@ -6,3 +6,12 @@ xcuserdata/
 *.xcuserstate
 xcuserdata/
 *.xcuserstate
+
+# Apple signing / private credentials
+LLAVE/
+*.p12
+*.cer
+*.mobileprovision
+*.pem
+*.key
+*.certSigningRequest
