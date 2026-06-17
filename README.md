@@ -1,16 +1,85 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/sHJi7xG7)
-# Space Master 2020
+# Space Master Infinity Escape
 
-Videojuego implementado con Scene Kit como práctica de la asignatura _Videojuegos para Dispositivos Móviles_ del Máster Universitario en Desarrollo de Software para Dispositivos Móviles
+## Overview
 
-Los recursos utilizados en el juego han sido obtenidos de las siguientes fuentes:
+Space Master Infinity Escape is a 3D mobile game developed for iOS using Swift and SceneKit. The project demonstrates the implementation of real-time game mechanics, collision handling, score management, user interface integration, and Apple ecosystem services.
 
-* Chocolate Ship - 3D Spaceship Asset, por _Romouald Dubois_, obtenido de [https://opengameart.org/content/chocolate-ship-3d-spaceship-asset]
+The objective of the game is to survive increasingly challenging waves while achieving the highest possible score.
 
-* Low Poly Rocks, por _Para_, obtenido de [https://opengameart.org/content/low-poly-rocks]
+---
 
-* Space Nebula Skybox, por _Alex Peterson_ (_NoLogoGames_), obtenido de [https://opengameart.org/content/]space-nebulas-skybox
+## Technologies
 
-* Efectos de sonido:  Bomb Explosion 8 bit, por _Luke_, obtenidos de [https://opengameart.org/content/bombexplosion8bit]
+* Swift
+* SceneKit
+* SpriteKit
+* Xcode
+* Game Center
+* AVFoundation
+* UIKit
 
-* Música: _Step to Space_, por _Rolemusic_, obtenido de [https://freemusicarchive.org/music/Rolemusic]
+---
+
+## Key Features
+
+* 3D gameplay built with SceneKit
+* Real-time collision detection
+* Dynamic score system
+* High score persistence
+* Audio effects and game feedback
+* Main menu and game over screens
+* Game Center integration
+* Responsive HUD and gameplay interface
+
+---
+
+## Architecture
+
+The project follows a modular structure separating:
+
+* Game logic
+* Scene management
+* User interface
+* Audio management
+* Score handling
+
+This organization facilitates maintainability and future feature expansion.
+
+---
+
+## Screenshots
+
+Screenshots of the game can be found in the `SCREENSHOTS` directory.
+
+---
+
+## Video Demonstration
+
+Gameplay videos are available in the `VIDEOS` directory.
+
+---
+
+## Skills Demonstrated
+
+This project demonstrates practical experience in:
+
+* Mobile Game Development
+* Swift Programming
+* SceneKit 3D Development
+* SpriteKit Integration
+* Event Handling
+* Object-Oriented Programming
+* Software Architecture
+* User Experience Design
+* Debugging and Testing
+
+---
+
+## Author
+
+Carlos Alfredo Callagua Llaque
+
+Master's Degree in Mobile Software Development
+University of Alicante
+
+GitHub: https://github.com/Carlsalf
